@@ -1,0 +1,93 @@
+---
+title: "Case 1"
+author: "Nathaniel Brown, Annie Tang, William Yang"
+date: "September 1, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(mvtnorm)
+library(ggplot2); library(dplyr); library(reshape2)
+```
+
+```{r}
+dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
+dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
+```
+
+
+#### First Approach: Univariate Normal
+$$
+
+log(y_{\text{wet}}) \sim N(log(\mu_{\text{wet}}), \sigma^2)
+\\
+log(y_{\text{blot}}) \sim N(log(\mu_{\text{blot}}), \sigma^2)
+
+$$
+
+
+```{r}
+par(mfrow=c(1,2))
+hist(log(dat$wet), main = "", xlab = "wet")
+hist(log(dat$blot), main = "", xlab = "")
+mtext("Approximate Normal Distribution of Uterus Weight", side=3, line = 1)
+par(mfrow=c(1,1))
+```
+This naive approach does not account for lab-to-lab heterogeneity. This results in an underestimation of the uncertainty in $\hat{\mu}$.
+
+#### Second Approach: Multivariate Normal
+$$
+y_i, \mu \in M_{\text{mx1}}( \Re)
+\\
+\Sigma \in M_{\text{nxn}}( \Re)
+\\ 
+log(y_i) \sim \text{MVNorm}(log(\mu), \Sigma)
+$$
+```{r}
+labweights <- dat[,c("blot", "lab")]
+names(labweights)
+labweights_long <- melt(labweights, id="lab")
+ggplot(data = labweights_long,
+       mapping = aes(x=lab, y=log(value))
+       ) + geom_boxplot() + theme(axis.text.x = element_text(angle=90))
+```
+
+In this model,$y_i$ is a vector of $m$ observations from lab $i$. Each lab has an approximate normal distribution with a different mean.
+
+This accounts for heterogeneity between labs, however, as you add more structure (blocking factors, covariates, etc.) to the model, the covariance matrix becomes more complicated, and maximum likelihood estimation becomes unwieldy. Also, this model estimates parameters only for these $\n$ groups, and does not generalize to new groups.
+
+
+
+
+#### Third Approach: Mixed Effects
+$$
+
+y_i, \mu \in M_{\text{mx1}}( \Re)
+\\
+\mu_i \sim \text{Norm}(\mu, \psi^2)
+\\
+\sigma_i^2 \sim \text{IG}(\nu/2, \nu\sigma^2/2)
+\\
+y_{ij} \sim \text{Norm}(\mu_i, \sigma^2_i)
+
+$$
+
+$y_{ij}$
+
+
+
+#### Fourth Approach: Bayesian Hierarchical Model
+$$
+\mu \sim \text{Norm}(\mu_0, \tau_0)
+\\
+\psi^2 \sim \text{IG}(\eta_0/2, \eta_0\psi_0/2)
+\\
+\sigma_i^2 \sim \text{IG}(\nu_0/2, \nu_0\sigma_0^2/2)
+\\
+\mu_i \sim \text{Norm}(\mu, \psi^2)
+\\
+y_{ij} \sim \text{Norm}(\mu_i, \sigma_i^2)
+$$
+
+This is better than the previous mixed model because it updates with new data. 
