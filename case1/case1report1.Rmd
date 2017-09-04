@@ -149,7 +149,7 @@ $$
 
 Let $y_i$ be a $mx1$ vector of observations, where $i$ indicates the lab and $m$ is equal to the number of observations within lab $i$. So, $y_{ij}$ represents an individual observation for subject j within lab i. We apply a Gaussian assumption here and say that each observation is normally distributed for some $\mu_i$ and $\sigma^2_i$ . 
 
-We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a population distribution characterizing lab to lab variability. This allows our model to be generalizable to future labs. Furthermore, when calculating the MLE of each $\mu_i$, there is less variability because they are "shrunk" toward the grand mean $\mu$. This introduces bias, but the decrease in varaiance reults in an overall benefit for the MSE. 
+We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a population distribution characterizing lab to lab variability. This allows our model to be generalizable to future labs. Furthermore, when calculating the MLE of each $\mu_i$, there is less variability because they are pulled in toward the grand mean $\mu$. This introduces bias, but the decrease in varaiance reults in an overall benefit for the MSE. 
 
 
 #### Fourth Approach: Bayesian Hierarchical Model
@@ -165,5 +165,5 @@ $$
 y_{ij} \sim \text{Norm}(\mu_i, \sigma_i^2)
 $$
 
-This is better than the previous mixed model because it updates with new data. 
+As an alternative to the classical mixed effects model, hierarchical modeling offers a Bayesian, but essentially equivalent approach. 
 
