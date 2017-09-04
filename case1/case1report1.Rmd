@@ -11,13 +11,79 @@ library(mvtnorm)
 library(ggplot2); library(dplyr); library(reshape2)
 ```
 
-```{r}
+### Exploratory Data Analysis 
+
+```{r, warning=FALSE}
 dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
 dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
+weights <- dat[,c("body", "wet", "blot")]
+weights_long <- melt(weights, id = "body")
 ```
 
+Initially, we plotted wet and blotted weights across all observations, and we noticed that the weights seemed to be separated into two groups.
+
+```{r, warning=FALSE}
+ggplot(data = weights_long, 
+       mapping = aes(x=body, y=value, color=variable)
+      ) + geom_point()
+```
+
+But after color coding the chart by protocol (A,B,C,D) we noticed that the A & B protocols were grouped together and the C & D protocols were grouped together. In class, we were told that two experimental models were used, one for juvenile female rats and another for adult female ovariectomized rats; we were also told that each experimental model was associated with two protocols each. Based on this knowledge, we suspect that the gap in observed weights is likely due to A & B protocols consisting of juvenile (i.e. smaller) rats. 
+
+```{r, warning=FALSE}
+grpweights <- dat[,c("body", "blot","lab", "proto", "group")]
+
+ggplot(data = grpweights, 
+       mapping = aes(x=body, y=blot, color=proto)
+) + geom_point()
+```
+
+We then created boxplots of body, wet, and blotted weight observations across each lab. The data appeared to be right skewed, so we took the log of the response variable and replotted. The resulting boxplots appear to be more normally distributed. It also appears that all the weights vary by lab. It is also worthwhile to note that body weight and uterus (wet, blot) weight are not measured on the same scale, but we were not given the units used for either. So, the relative size of each box plot is not to scale. 
+
+
+```{r, warning=FALSE}
+labweights <- dat[,c("body", "wet", "blot", "lab")]
+labweights_long <- melt(labweights, id="lab")
+ggplot(data = labweights_long,
+       mapping = aes(x=lab, y=value, color = variable)
+       ) + geom_boxplot()
+ggplot(data = labweights_long,
+       mapping = aes(x=lab, y=log(value), color = variable)
+       ) + geom_boxplot()
+```
+
+Next, we plotted the body, wet, and blotted weight observations according to the protocol that was applied. Again, we logged each of the weight values to account for data skew. There appears to be more variation in uterus weights and body weight. 
+
+```{r, warning=FALSE}
+protoweights <- dat[,c("body", "wet", "blot", "proto")]
+protoweights_long <- melt(protoweights, id="proto")
+ggplot(data = protoweights_long,
+       mapping = aes(x=proto, y=log(value), color = variable)
+) + geom_boxplot()
+```
+
+Upon plotting all combinations of dosages across groups, we notice a couple of trends. First, we see that as the quantity of dose 1 increases without dose 2, the log blotted weight increases. Secondly, when dose 2 is introduced, an increase in quantity of dose 2 leads to a decrease in log blotted weight.
+
+```{r, warning=FALSE}
+dosage_groups <-  dat %>% 
+                  group_by(group) %>% 
+                  summarize(dose1 = unique(dose1), 
+                            dose2 = unique(dose2),
+                            A = sum(proto == "A"),
+                            B = sum(proto == "B"),
+                            C = sum(proto == "C"),
+                            D = sum(proto == "D")
+                  ) %>% as.data.frame()
+dosage_groups
+ggplot(data = dat ,
+       mapping=aes(x=as.factor(group), y=log(blot))) + geom_boxplot() + xlab("dosage group")
+
+```
+
+### Possible Approaches to Analysis
 
 #### First Approach: Univariate Normal
+
 $$
 
 log(y_{\text{wet}}) \sim N(log(\mu_{\text{wet}}), \sigma^2)
@@ -27,7 +93,7 @@ log(y_{\text{blot}}) \sim N(log(\mu_{\text{blot}}), \sigma^2)
 $$
 
 
-```{r}
+```{r, warning=FALSE}
 par(mfrow=c(1,2))
 hist(log(dat$wet), main = "", xlab = "wet")
 hist(log(dat$blot), main = "", xlab = "")
@@ -44,7 +110,7 @@ y_i, \mu \in M_{\text{mx1}}( \Re)
 \\ 
 log(y_i) \sim \text{MVNorm}(log(\mu), \Sigma)
 $$
-```{r}
+```{r, warning=FALSE}
 labweights <- dat[,c("blot", "lab")]
 names(labweights)
 labweights_long <- melt(labweights, id="lab")
@@ -61,6 +127,7 @@ This accounts for heterogeneity between labs, however, as you add more structure
 
 
 #### Third Approach: Mixed Effects
+
 $$
 
 y_i, \mu \in M_{\text{mx1}}( \Re)

@@ -62,3 +62,10 @@ dosage_groups <-  dat %>%
 
 #super naive model 1
 # log(uterus weight) ~ Norm(mu, sigma2)
+
+doseweights <- dat %>% mutate(doseg)
+
+ggplot(data = dat ,
+       mapping=aes(x=as.factor(group), y=log(blot))) + geom_boxplot()
+
+
