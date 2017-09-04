@@ -5,10 +5,20 @@ date: "September 1, 2017"
 output: html_document
 ---
 
+we are interested in estimating dose response curve!
+therefore we want to treat dose as a continuous variable.
+
+group i in different lab should not be treated as the same group.
+do not use group! it provides no new information.
+
+2 recommended approaches to analyze data are as:
+  freq mixed effects (lme4::lmer)
+  bayesian hierarchical (rstan, rjags)
+
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(mvtnorm)
-library(ggplot2); library(dplyr); library(reshape2)
+library(ggplot2); library(dplyr); library(reshape2); library(knitr)
 ```
 
 ### Exploratory Data Analysis 
@@ -76,7 +86,7 @@ dosage_groups <-  dat %>%
                             C = sum(proto == "C"),
                             D = sum(proto == "D")
                   ) %>% as.data.frame()
-dosage_groups
+kable(dosage_groups)
 ggplot(data = dat ,
        mapping=aes(x=as.factor(group), y=log(blot))) + geom_boxplot() + xlab("dosage group")
 
@@ -152,6 +162,3 @@ $$
 
 This is better than the previous mixed model because it updates with new data. 
 
-
-frequentist mixed effects model (lme4/lmer function) *this is easier
-bayesian hierarchical model (rstan package, or rjags package)
