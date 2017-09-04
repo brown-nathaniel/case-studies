@@ -7,6 +7,7 @@ output: html_document
 
 we are interested in estimating dose response curve!
 therefore we want to treat dose as a continuous variable.
+does response curve vary across labs? estimate the variation between labs.
 
 group i in different lab should not be treated as the same group.
 do not use group! it provides no new information.
@@ -57,11 +58,15 @@ We then created boxplots of body, wet, and blotted weight observations across ea
 labweights <- dat[,c("body", "wet", "blot", "lab")]
 labweights_long <- melt(labweights, id="lab")
 ggplot(data = labweights_long,
-       mapping = aes(x=lab, y=value, color = variable)
-       ) + geom_boxplot()
+       mapping = aes(x=lab, y=value, color = variable)) +
+  geom_boxplot() + 
+  ylab("weight") + 
+  theme(axis.text.x = element_text(angle = 90, hjust=1))
 ggplot(data = labweights_long,
-       mapping = aes(x=lab, y=log(value), color = variable)
-       ) + geom_boxplot()
+       mapping = aes(x=lab, y=log(value), color = variable)) + 
+  geom_boxplot() + 
+  ylab("log(weight)") + 
+  theme(axis.text.x = element_text(angle = 90, hjust=1))
 ```
 
 Next, we plotted the body, wet, and blotted weight observations according to the protocol that was applied. Again, we logged each of the weight values to account for data skew. There appears to be more variation in uterus weights and body weight. 
@@ -70,8 +75,11 @@ Next, we plotted the body, wet, and blotted weight observations according to the
 protoweights <- dat[,c("body", "wet", "blot", "proto")]
 protoweights_long <- melt(protoweights, id="proto")
 ggplot(data = protoweights_long,
-       mapping = aes(x=proto, y=log(value), color = variable)
-) + geom_boxplot()
+       mapping = aes(x=proto, y=log(value), color = variable)) + 
+  geom_boxplot() +
+  ylab("log(weight)") + 
+  xlab("protocol")
+
 ```
 
 Upon plotting all combinations of dosages across groups, we notice a couple of trends. First, we see that as the quantity of dose 1 increases without dose 2, the log blotted weight increases. Secondly, when dose 2 is introduced, an increase in quantity of dose 2 leads to a decrease in log blotted weight.
@@ -87,8 +95,15 @@ dosage_groups <-  dat %>%
                             D = sum(proto == "D")
                   ) %>% as.data.frame()
 kable(dosage_groups)
+doselabels <- apply(dosage_groups[,c("dose1", "dose2")], 1, paste, collapse = ",") %>% paste("(", ., ")", sep="")
+
 ggplot(data = dat ,
-       mapping=aes(x=as.factor(group), y=log(blot))) + geom_boxplot() + xlab("dosage group")
+       mapping=aes(x=as.factor(group), y=log(blot))) + 
+  geom_boxplot() + 
+  ylab("log(blotted uterus weight)") + 
+  xlab("(dose1, dose2)") + 
+  scale_x_discrete(labels = doselabels) + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
 
 ```
 
@@ -106,9 +121,14 @@ $$
 
 ```{r, warning=FALSE}
 par(mfrow=c(1,2))
-hist(log(dat$wet), main = "", xlab = "wet")
-hist(log(dat$blot), main = "", xlab = "")
-mtext("Approximate Normal Distribution of Uterus Weight", side=3, line = 1)
+ggplot(dat,
+       aes(x=log(wet))) + geom_histogram()
+ggplot(dat,
+       aes(x=log(blot))) + geom_histogram()
+ggplot(dat[dat$proto %in% c("A", "B"),],
+       aes(x=log(wet))) + geom_histogram()
+ggplot(dat[dat$proto %in% c("C", "D"),],
+       aes(x=log(blot))) + geom_histogram()
 par(mfrow=c(1,1))
 ```
 This naive approach does not account for lab-to-lab heterogeneity. This results in an underestimation of the uncertainty in $\hat{\mu}$.
@@ -121,6 +141,7 @@ y_i, \mu \in M_{\text{mx1}}( \Re)
 \\ 
 log(y_i) \sim \text{MVNorm}(log(\mu), \Sigma)
 $$
+
 ```{r, warning=FALSE}
 labweights <- dat[,c("blot", "lab")]
 names(labweights)
