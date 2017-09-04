@@ -151,3 +151,7 @@ y_{ij} \sim \text{Norm}(\mu_i, \sigma_i^2)
 $$
 
 This is better than the previous mixed model because it updates with new data. 
+
+
+frequentist mixed effects model (lme4/lmer function) *this is easier
+bayesian hierarchical model (rstan package, or rjags package)
