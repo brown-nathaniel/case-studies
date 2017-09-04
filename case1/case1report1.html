@@ -60,6 +60,7 @@ if (window.hljs && document.readyState && document.readyState === "complete") {
 
 <div id="exploratory-data-analysis" class="section level3">
 <h3>Exploratory Data Analysis</h3>
+<p>After loading the data, we noticed that there were several rows with missing (NA) values for weights. We decided to only remove the rows with missing values for blot weight or body weight (4 rows total). Since our main response variable of interest was blot weight, we decided to keep the observations with missing wet weight.</p>
 <pre class="r"><code>dat &lt;- read.table(&quot;alllabs.txt&quot;, header = TRUE, stringsAsFactors = FALSE, na.strings = &quot;.&quot;)
 dat &lt;- dat[!(is.na(dat$blot) | is.na(dat$body)),]
 weights &lt;- dat[,c(&quot;body&quot;, &quot;wet&quot;, &quot;blot&quot;)]
@@ -125,9 +126,11 @@ dosage_groups</code></pre>
 <h3>Possible Approaches to Analysis</h3>
 <div id="first-approach-univariate-normal" class="section level4">
 <h4>First Approach: Univariate Normal</h4>
-<p>$$</p>
-<p>log(y_{}) N(log(<em>{}), ^2) \ log(y</em>{}) N(log(_{}), ^2)</p>
-<p>$$</p>
+<p><span class="math">\[
+log(y_{\text{wet}}) \sim N(log(\mu_{\text{wet}}), \sigma^2)
+\\
+log(y_{\text{blot}}) \sim N(log(\mu_{\text{blot}}), \sigma^2)
+\]</span></p>
 <pre class="r"><code>par(mfrow=c(1,2))
 hist(log(dat$wet), main = &quot;&quot;, xlab = &quot;wet&quot;)
 hist(log(dat$blot), main = &quot;&quot;, xlab = &quot;&quot;)
@@ -158,10 +161,15 @@ ggplot(data = labweights_long,
 </div>
 <div id="third-approach-mixed-effects" class="section level4">
 <h4>Third Approach: Mixed Effects</h4>
-<p>$$</p>
-<p>y_i, M_{}( ) \ <em>i (, ^2) \ </em>i^2 (/2, ^2/2) \ y_{ij} (<em>i, ^2</em>i)</p>
-<p>$$</p>
-<p><span class="math">\(y_{ij}\)</span></p>
+<p><span class="math">\[
+y_i, \mu \in M_{\text{mx1}}( \Re)
+\\
+\mu_i \sim \text{Norm}(\mu, \psi^2)
+\\
+\sigma_i^2 \sim \text{IG}(\nu/2, \nu\sigma^2/2)
+\\
+y_{ij} \sim \text{Norm}(\mu_i, \sigma^2_i)
+\]</span></p>
 </div>
 <div id="fourth-approach-bayesian-hierarchical-model" class="section level4">
 <h4>Fourth Approach: Bayesian Hierarchical Model</h4>

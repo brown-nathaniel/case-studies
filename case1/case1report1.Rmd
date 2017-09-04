@@ -13,6 +13,8 @@ library(ggplot2); library(dplyr); library(reshape2)
 
 ### Exploratory Data Analysis 
 
+After loading the data, we noticed that there were several rows with missing (NA) values for weights. We decided to only remove the rows with missing values for blot weight or body weight (4 rows total). Since our main response variable of interest was blot weight, we decided to keep the observations with missing wet weight. 
+
 ```{r, warning=FALSE}
 dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
 dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
@@ -84,12 +86,11 @@ ggplot(data = dat ,
 
 #### First Approach: Univariate Normal
 
-$$
 
+$$
 log(y_{\text{wet}}) \sim N(log(\mu_{\text{wet}}), \sigma^2)
 \\
 log(y_{\text{blot}}) \sim N(log(\mu_{\text{blot}}), \sigma^2)
-
 $$
 
 
@@ -124,12 +125,9 @@ In this model,$y_i$ is a vector of $m$ observations from lab $i$. Each lab has a
 This accounts for heterogeneity between labs, however, as you add more structure (blocking factors, covariates, etc.) to the model, the covariance matrix becomes more complicated, and maximum likelihood estimation becomes unwieldy. Also, this model estimates parameters only for these $\n$ groups, and does not generalize to new groups.
 
 
-
-
 #### Third Approach: Mixed Effects
 
 $$
-
 y_i, \mu \in M_{\text{mx1}}( \Re)
 \\
 \mu_i \sim \text{Norm}(\mu, \psi^2)
@@ -137,12 +135,7 @@ y_i, \mu \in M_{\text{mx1}}( \Re)
 \sigma_i^2 \sim \text{IG}(\nu/2, \nu\sigma^2/2)
 \\
 y_{ij} \sim \text{Norm}(\mu_i, \sigma^2_i)
-
 $$
-
-$y_{ij}$
-
-
 
 #### Fourth Approach: Bayesian Hierarchical Model
 $$
