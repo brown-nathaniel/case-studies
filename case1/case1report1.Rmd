@@ -29,16 +29,20 @@ After loading the data, we noticed that there were several rows with missing (NA
 ```{r, warning=FALSE}
 dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
 dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
-weights <- dat[,c("body", "wet", "blot")]
-weights_long <- melt(weights, id = "body")
 ```
 
-Initially, we plotted wet and blotted weights across all observations, and we noticed that the weights seemed to be separated into two groups.
+Initially, we plotted the blotted weights by body weights, and we noticed that the body weights seemed to be separated into two groups.
 
 ```{r, warning=FALSE}
-ggplot(data = weights_long, 
-       mapping = aes(x=body, y=value, color=variable)
-      ) + geom_point()
+weights <- dat[,c("body", "blot")]
+ggplot(data = weights, 
+       mapping = aes(x=body, y=blot)) + 
+  geom_point() + 
+  labs(title="Blotted Weight vs. Body Weight",
+       x="Body Weight",
+       y="Blotted Weight"
+       ) +
+  theme(plot.title = element_text(hjust = 0.5))
 ```
 
 But after color coding the chart by protocol (A,B,C,D) we noticed that the A & B protocols were grouped together and the C & D protocols were grouped together. In class, we were told that two experimental models were used, one for juvenile female rats and another for adult female ovariectomized rats; we were also told that each experimental model was associated with two protocols each. Based on this knowledge, we suspect that the gap in observed weights is likely due to A & B protocols consisting of juvenile (i.e. smaller) rats. 
@@ -47,38 +51,56 @@ But after color coding the chart by protocol (A,B,C,D) we noticed that the A & B
 grpweights <- dat[,c("body", "blot","lab", "proto", "group")]
 
 ggplot(data = grpweights, 
-       mapping = aes(x=body, y=blot, color=proto)
-) + geom_point()
+       mapping = aes(x=body, y=blot, color=proto)) + 
+  geom_point() +
+  labs(title="Blotted Weight vs. Body Weight",
+       x="Body Weight",
+       y="Blotted Weight",
+       color="Protocol"
+       ) +
+  theme(plot.title = element_text(hjust = 0.5))
 ```
 
-We then created boxplots of body, wet, and blotted weight observations across each lab. The data appeared to be right skewed, so we took the log of the response variable and replotted. The resulting boxplots appear to be more normally distributed. It also appears that all the weights vary by lab. It is also worthwhile to note that body weight and uterus (wet, blot) weight are not measured on the same scale, but we were not given the units used for either. So, the relative size of each box plot is not to scale. 
+We then created boxplots of body and blotted weight observations across each lab. The data appeared to be right skewed, so we took the log of the response variable and replotted. The resulting boxplots appear to be more normally distributed. It also appears that all the weights vary by lab. It is also worthwhile to note that body weight and uterus weight are not measured on the same scale, but we were not given the units used for either. So, the relative size of each box plot is not to scale. 
 
 
 ```{r, warning=FALSE}
-labweights <- dat[,c("body", "wet", "blot", "lab")]
+labweights <- dat[,c("body", "blot", "lab")]
 labweights_long <- melt(labweights, id="lab")
 ggplot(data = labweights_long,
        mapping = aes(x=lab, y=value, color = variable)) +
   geom_boxplot() + 
-  ylab("weight") + 
-  theme(axis.text.x = element_text(angle = 90, hjust=1))
+  labs(title = "Weight by Lab",
+       x = "Lab",
+       y = "Weight",
+       color = "Weighed Object") +
+  theme(axis.text.x = element_text(angle = 90, hjust=1),
+        plot.title = element_text(hjust = 0.5))
+
 ggplot(data = labweights_long,
        mapping = aes(x=lab, y=log(value), color = variable)) + 
   geom_boxplot() + 
-  ylab("log(weight)") + 
-  theme(axis.text.x = element_text(angle = 90, hjust=1))
+  labs(title = "log(Weight) by Lab",
+       x = "Lab",
+       y = "log(Weight)",
+       color = "Weighed Object") +
+  theme(axis.text.x = element_text(angle = 90, hjust=1),
+        plot.title = element_text(hjust = 0.5))
 ```
 
-Next, we plotted the body, wet, and blotted weight observations according to the protocol that was applied. Again, we logged each of the weight values to account for data skew. There appears to be more variation in uterus weights and body weight. 
+Next, we plotted the body and blotted weight observations according to the protocol that was applied. Again, we logged each of the weight values to account for data skew.
 
 ```{r, warning=FALSE}
-protoweights <- dat[,c("body", "wet", "blot", "proto")]
+protoweights <- dat[,c("body", "blot", "proto")]
 protoweights_long <- melt(protoweights, id="proto")
 ggplot(data = protoweights_long,
        mapping = aes(x=proto, y=log(value), color = variable)) + 
   geom_boxplot() +
-  ylab("log(weight)") + 
-  xlab("protocol")
+  labs(title = "log(Weight) by Protocol",
+       x = "Protocol",
+       y = "log(Weight)",
+       color = "Weighed Object") +
+  theme(plot.title = element_text(hjust = 0.5))
 
 ```
 
@@ -95,15 +117,17 @@ dosage_groups <-  dat %>%
                             D = sum(proto == "D")
                   ) %>% as.data.frame()
 kable(dosage_groups)
-doselabels <- apply(dosage_groups[,c("dose1", "dose2")], 1, paste, collapse = ",") %>% paste("(", ., ")", sep="")
+doselabels <- apply(dosage_groups[,c("dose1", "dose2")], 1, paste, collapse = ", ") %>% paste("(", ., ")", sep="")
 
 ggplot(data = dat ,
        mapping=aes(x=as.factor(group), y=log(blot))) + 
   geom_boxplot() + 
-  ylab("log(blotted uterus weight)") + 
-  xlab("(dose1, dose2)") + 
+  labs(title = "log(Blotted Weight) by Dosage",
+       x = "Combination of (Dose 1, Dose 2)",
+       y = "log(Blotted Weight)") +
   scale_x_discrete(labels = doselabels) + 
-  theme(axis.text.x = element_text(angle = 45, hjust=1))
+  theme(axis.text.x = element_text(angle = 45, hjust=1),
+        plot.title = element_text(hjust = 0.5))
 
 ```
 
@@ -117,20 +141,6 @@ log(y_{\text{wet}}) \sim N(log(\mu_{\text{wet}}), \sigma^2)
 \\
 log(y_{\text{blot}}) \sim N(log(\mu_{\text{blot}}), \sigma^2)
 $$
-
-
-```{r, warning=FALSE}
-par(mfrow=c(1,2))
-ggplot(dat,
-       aes(x=log(wet))) + geom_histogram()
-ggplot(dat,
-       aes(x=log(blot))) + geom_histogram()
-ggplot(dat[dat$proto %in% c("A", "B"),],
-       aes(x=log(wet))) + geom_histogram()
-ggplot(dat[dat$proto %in% c("C", "D"),],
-       aes(x=log(blot))) + geom_histogram()
-par(mfrow=c(1,1))
-```
 This naive approach does not account for lab-to-lab heterogeneity. This results in an underestimation of the uncertainty in $\hat{\mu}$.
 
 #### Second Approach: Multivariate Normal
@@ -186,5 +196,9 @@ $$
 y_{ij} \sim \text{Norm}(\mu_i, \sigma_i^2)
 $$
 
-As an alternative to the classical mixed effects model, hierarchical modeling offers a Bayesian, but essentially equivalent approach. 
+As an alternative to the classical mixed effects model, hierarchical modeling offers a Bayesian, but essentially equivalent approach.
+
+### Contributions
+
+Nathaniel Brown made the visualizations.
 
