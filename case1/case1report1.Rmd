@@ -1,10 +1,11 @@
 ---
 title: "Case 1"
 author: "Nathaniel Brown, Annie Tang, William Yang"
-date: "September 1, 2017"
+date: "September 6, 2017"
 output: html_document
 ---
 
+<!--
 we are interested in estimating dose response curve!
 therefore we want to treat dose as a continuous variable.
 does response curve vary across labs? estimate the variation between labs.
@@ -15,7 +16,7 @@ do not use group! it provides no new information.
 2 recommended approaches to analyze data are as:
   freq mixed effects (lme4::lmer)
   bayesian hierarchical (rstan, rjags)
-
+-->
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -104,7 +105,7 @@ ggplot(data = protoweights_long,
 
 ```
 
-Upon plotting all combinations of dosages across groups, we notice a couple of trends. First, we see that as the quantity of dose 1 increases without dose 2, the log blotted weight increases. Secondly, when dose 2 is introduced, an increase in quantity of dose 2 leads to a decrease in log blotted weight.
+Upon plotting all combinations of dosages across groups (each group represents a different combination of dose 1 and dose 2), we notice a couple of trends. First, we see that as the quantity of dose 1 increases without dose 2, the log blotted weight increases. Secondly, when dose 2 is introduced, an increase in quantity of dose 2 leads to a decrease in log blotted weight.
 
 ```{r, warning=FALSE}
 dosage_groups <-  dat %>% 
@@ -116,7 +117,6 @@ dosage_groups <-  dat %>%
                             C = sum(proto == "C"),
                             D = sum(proto == "D")
                   ) %>% as.data.frame()
-kable(dosage_groups)
 doselabels <- apply(dosage_groups[,c("dose1", "dose2")], 1, paste, collapse = ", ") %>% paste("(", ., ")", sep="")
 
 ggplot(data = dat ,
@@ -128,6 +128,7 @@ ggplot(data = dat ,
   scale_x_discrete(labels = doselabels) + 
   theme(axis.text.x = element_text(angle = 45, hjust=1),
         plot.title = element_text(hjust = 0.5))
+kable(dosage_groups)
 
 ```
 
@@ -137,55 +138,50 @@ ggplot(data = dat ,
 
 
 $$
-log(y_{\text{wet}}) \sim N(log(\mu_{\text{wet}}), \sigma^2)
-\\
-log(y_{\text{blot}}) \sim N(log(\mu_{\text{blot}}), \sigma^2)
+log(y) \sim \text{Norm}(\mu , \sigma^2)
 $$
-This naive approach does not account for lab-to-lab heterogeneity. This results in an underestimation of the uncertainty in $\hat{\mu}$.
+This naive approach assumes the blotted weight follows a normal distribution with constant variance. It does not account for lab-to-lab heterogeneity, which we illustrated with boxplots of log(Weight) by Lab. This results in an underestimation of the uncertainty in $\hat{\mu}$.
 
 #### Second Approach: Multivariate Normal
 $$
-y_i, \mu \in M_{\text{mx1}}( \Re)
+y_i, \mu \in M_{n_i \times 1}( \Re)
 \\
-\Sigma \in M_{\text{nxn}}( \Re)
+\Sigma \in M_{n \times n}( \Re)
 \\ 
-log(y_i) \sim \text{MVNorm}(log(\mu), \Sigma)
+log(y_i) \sim \text{MVNorm}(\mu, \Sigma)
 $$
 
-```{r, warning=FALSE}
-labweights <- dat[,c("blot", "lab")]
-names(labweights)
-labweights_long <- melt(labweights, id="lab")
-ggplot(data = labweights_long,
-       mapping = aes(x=lab, y=log(value))
-       ) + geom_boxplot() + theme(axis.text.x = element_text(angle=90))
-```
+In this model,$y_i$ is a vector of $n_i$ observations from lab $i$. Each lab has an approximate normal distribution with a different mean.
 
-In this model,$y_i$ is a vector of $m$ observations from lab $i$. Each lab has an approximate normal distribution with a different mean.
-
-This accounts for heterogeneity between labs, however, as you add more structure (blocking factors, covariates, etc.) to the model, the covariance matrix becomes more complicated, and maximum likelihood estimation becomes unwieldy. Also, this model estimates parameters only for these $\n$ groups, and does not generalize to new groups.
+This accounts for heterogeneity between labs, however, as you add more structure (blocking factors, covariates for dosage, etc.) to the model, the covariance matrix becomes more complicated, and maximum likelihood estimation becomes unwieldy. Also, this model estimates parameters only for these $n$ groups, and does not apply to new groups without recalculation.
 
 
 #### Third Approach: Mixed Effects
 
 $$
-y_i, \mu \in M_{\text{mx1}}( \Re)
+y_i \in M_{n_i \times 1}( \Re)
 \\
-y_{ij} \sim \text{Norm}(\mu_i, \sigma^2_i)
+\mu, \mu_i, \sigma^2, \sigma^2_i, \psi^2, \nu, y_{ij} \in \Re
 \\
 \mu_i \sim \text{Norm}(\mu, \psi^2)
 \\
 \sigma_i^2 \sim \text{IG}(\nu/2, \nu\sigma^2/2)
+\\
+y_{ij} \sim \text{Norm}(\mu_i, \sigma^2_i)
 $$
 
-Let $y_i$ be a $mx1$ vector of observations, where $i$ indicates the lab and $m$ is equal to the number of observations within lab $i$. So, $y_{ij}$ represents an individual observation for subject j within lab i. We apply a Gaussian assumption here and say that each observation is normally distributed for some $\mu_i$ and $\sigma^2_i$ . 
+Let $y_i$ be a $n_i \times 1$ vector of observations, where $i$ indicates the lab and $n_i$ is equal to the number of observations within lab $i$. So, $y_{ij}$ represents an individual observation for subject $j$ within lab $i$. We apply a Gaussian assumption here and say that each observation is normally distributed for some $\mu_i$ and $\sigma^2_i$. 
 
-We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a population distribution characterizing lab to lab variability. This allows our model to be generalizable to future labs. Furthermore, when calculating the MLE of each $\mu_i$, there is less variability because they are pulled in toward the grand mean $\mu$. This introduces bias, but the decrease in varaiance reults in an overall benefit for the MSE. 
+We then add a random effect on $\mu_i$, so $\text{Norm}(\mu_c, \psi^2_c)$ gives us a population distribution characterizing lab-to-lab variability. This allows our model to be generalizable to future labs. Furthermore, when calculating the MLE of each $\mu_i$, there is less variability because they are pulled in toward the grand mean $\mu$. This introduces bias, but the decrease in varaiance reults in an overall benefit for the MSE. 
 
 
 #### Fourth Approach: Bayesian Hierarchical Model
 $$
-\mu \sim \text{Norm}(\mu_0, \tau_0)
+y_i \in M_{n_i \times 1}( \Re)
+\\
+\mu, \mu_i, \mu_0, \sigma^2_i, \sigma^2_0, \psi^2, \psi^2_0, \tau_0^2, \nu_0, \eta_0,  y_{ij} \in \Re
+\\
+\mu \sim \text{Norm}(\mu_0, \tau_0^2)
 \\
 \psi^2 \sim \text{IG}(\eta_0/2, \eta_0\psi_0/2)
 \\
@@ -200,5 +196,4 @@ As an alternative to the classical mixed effects model, hierarchical modeling of
 
 ### Contributions
 
-Nathaniel Brown made the visualizations.
-
+Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository.
