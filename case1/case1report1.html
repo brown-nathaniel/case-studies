@@ -378,24 +378,28 @@ y_{ij} \sim \text{Norm}(\mu_i, \sigma^2_i)
 <p><span class="math display">\[
 y_i \in M_{n_i \times 1}( \Re)
 \\
-\mu, \mu_i, \mu_0, \sigma^2_i, \sigma^2_0, \psi^2, \psi^2_0, \tau_0^2, \nu_0, \eta_0,  y_{ij} \in \Re
-\\
 \mu \sim \text{Norm}(\mu_0, \tau_0^2)
 \\
 \psi^2 \sim \text{IG}(\eta_0/2, \eta_0\psi_0/2)
 \\
-\sigma_i^2 \sim \text{IG}(\nu_0/2, \nu_0\sigma_0^2/2)
-\\
 \mu_i \sim \text{Norm}(\mu, \psi^2)
 \\
-y_{ij} \sim \text{Norm}(\mu_i, \sigma_i^2)
+\beta_{1i} \sim \text{Norm}(\theta_{1}, \sigma^2_{1})
+\\
+\beta_{2i} \sim \text{Norm}(\theta_{2}, \sigma^2_{2})
+\\
+\beta_{3i} \sim \text{Norm}(\theta_{3}, \sigma^2_{3})
+\\
+\epsilon_{ij} \sim \text{Norm}(0, \sigma^2)
+\\
+y_{ij} = \mu_i + \beta_{1i}x_{1ij} + \beta_{2i}x_{2ij} + \beta_{3i}x_{1ij}x_{2ij} + \epsilon_{ij}
 \]</span></p>
-<p>As an alternative to the classical mixed effects model, hierarchical modeling offers a Bayesian, but essentially equivalent approach.</p>
+<p>As an alternative to the classical mixed effects model, hierarchical modeling offers a Bayesian, but essentially equivalent approach. We also added fixed linear effects for the dosages, since the purpose of this study is to investigate the variation of the dosage response curve in different locations. <span class="math inline">\(x_{kij}\)</span> represents the amount of dose <span class="math inline">\(k\)</span> on patient <span class="math inline">\(ij\)</span>. The interaction effect is included because dose 2 appears only at a certain level of dose 1.</p>
 </div>
 </div>
 <div id="contributions" class="section level3">
 <h3>Contributions</h3>
-<p>Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository.</p>
+<p>Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. Approaches to analysis were a joint effort by all members of the group.</p>
 </div>
 
 
