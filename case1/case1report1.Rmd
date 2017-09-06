@@ -179,10 +179,16 @@ We then add a random effect on $\mu_i$, so $\text{Norm}(\mu_c, \psi^2_c)$ gives 
 $$
 y_i \in M_{n_i \times 1}( \Re)
 \\
+<<<<<<< HEAD
+=======
+\mu, \mu_i, \mu_0, \sigma^2_i, \sigma^2_0, \psi^2, \psi^2_0, \tau_0^2, \nu_0, \eta_0,  y_{ij} \in \Re
+\\
+>>>>>>> parent of d5e2297... added contribution statement
 \mu \sim \text{Norm}(\mu_0, \tau_0^2)
 \\
 \psi^2 \sim \text{IG}(\eta_0/2, \eta_0\psi_0/2)
 \\
+<<<<<<< HEAD
 \mu_i \sim \text{Norm}(\mu, \psi^2)
 \\
 \beta_{1i} \sim \text{Norm}(\theta_{1}, \sigma^2_{1})
@@ -205,3 +211,17 @@ Nathaniel Brown made the visualizations for this report. He also organized the r
 =======
 Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository.
 >>>>>>> parent of e4129d0... annie tang contributions
+=======
+\sigma_i^2 \sim \text{IG}(\nu_0/2, \nu_0\sigma_0^2/2)
+\\
+\mu_i \sim \text{Norm}(\mu, \psi^2)
+\\
+y_{ij} \sim \text{Norm}(\mu_i, \sigma_i^2)
+$$
+
+As an alternative to the classical mixed effects model, hierarchical modeling offers a Bayesian, but essentially equivalent approach.
+
+### Contributions
+
+Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. Approaches to analysis were a joint effort by all members of the group. 
+>>>>>>> parent of d5e2297... added contribution statement
