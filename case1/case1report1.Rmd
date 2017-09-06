@@ -196,4 +196,4 @@ As an alternative to the classical mixed effects model, hierarchical modeling of
 
 ### Contributions
 
-Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository.
+Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. Approaches to analysis were a joint effort by all members of the group. 
