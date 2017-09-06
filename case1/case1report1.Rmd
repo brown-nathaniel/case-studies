@@ -195,7 +195,6 @@ y_i \in M_{n_i \times 1}( \Re)
 \\
 \sigma_3^2 \sim \text{IG}(\nu_{03}/2, \nu_{03}\sigma_{03}^2/2)
 \\
-
 \beta_{1i} \sim \text{Norm}(\theta_{1}, \sigma^2_{1})
 \\
 \beta_{2i} \sim \text{Norm}(\theta_{2}, \sigma^2_{2})

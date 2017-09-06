@@ -373,8 +373,37 @@ y_{ij} \sim \text{Norm}(\mu_i, \sigma^2_i)
 </div>
 <div id="fourth-approach-bayesian-hierarchical-model" class="section level4">
 <h4>Fourth Approach: Bayesian Hierarchical Model</h4>
-<p>$$ y_i M_{n_i 1}( ) \ (<em>0, <em>0<sup>2) \ </sup>2 (<em>0/2, <em>0<em>0<sup>2/2) \ <em>i (, ^2) \ <em>1 (</em>{01}, </em>{01}</sup>2) \ <em>2 (</em>{02}, </em>{02}^2) \ <em>3 (</em>{03}, </em>{03}^2) \ <em>1^2 (</em>{01}/2, </em>{01}</em>{01}^2/2) \ <em>2^2 (</em>{02}/2, </em>{02}<em>{02}^2/2) \ <em>3^2 (</em>{03}/2, </em>{03}_{03}^2/2) \</p>
-<p><em>{1i} (</em>{1}, ^2_{1}) \ <em>{2i} (</em>{2}, ^2_{2}) \ <em>{3i} (</em>{3}, ^2_{3}) \ <em>{ij} (0, ^2) \ y</em>{ij} = <em>i + </em>{1i}x_{1ij} + <em>{2i}x</em>{2ij} + <em>{3i}x</em>{1ij}x_{2ij} + _{ij} $$</p>
+<p><span class="math display">\[
+y_i \in M_{n_i \times 1}( \Re)
+\\
+\mu \sim \text{Norm}(\mu_0, \tau_0^2)
+\\
+\psi^2 \sim \text{IG}(\eta_0/2, \eta_0\psi_0^2/2)
+\\
+\mu_i \sim \text{Norm}(\mu, \psi^2)
+\\
+\theta_1 \sim \text{Norm}(\theta_{01}, \tau_{01}^2)
+\\
+\theta_2 \sim \text{Norm}(\theta_{02}, \tau_{02}^2)
+\\
+\theta_3 \sim \text{Norm}(\theta_{03}, \tau_{03}^2)
+\\
+\sigma_1^2 \sim \text{IG}(\nu_{01}/2, \nu_{01}\sigma_{01}^2/2)
+\\
+\sigma_2^2 \sim \text{IG}(\nu_{02}/2, \nu_{02}\sigma_{02}^2/2)
+\\
+\sigma_3^2 \sim \text{IG}(\nu_{03}/2, \nu_{03}\sigma_{03}^2/2)
+\\
+\beta_{1i} \sim \text{Norm}(\theta_{1}, \sigma^2_{1})
+\\
+\beta_{2i} \sim \text{Norm}(\theta_{2}, \sigma^2_{2})
+\\
+\beta_{3i} \sim \text{Norm}(\theta_{3}, \sigma^2_{3})
+\\
+\epsilon_{ij} \sim \text{Norm}(0, \sigma^2)
+\\
+y_{ij} = \mu_i + \beta_{1i}x_{1ij} + \beta_{2i}x_{2ij} + \beta_{3i}x_{1ij}x_{2ij} + \epsilon_{ij}
+\]</span></p>
 <p>As an alternative to the classical mixed effects model, hierarchical modeling offers a Bayesian, but essentially equivalent approach. We also added fixed linear effects for the dosages, since the purpose of this study is to investigate the variation of the dosage response curve in different labs. <span class="math inline">\(x_{kij}\)</span> represents the amount of dose <span class="math inline">\(k\)</span> on patient <span class="math inline">\(ij\)</span>. The interaction effect is included because dose 2 appears only at a certain level of dose 1.</p>
 </div>
 </div>
