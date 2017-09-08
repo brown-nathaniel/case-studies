@@ -1,0 +1,201 @@
+---
+title: "What Influences Forest Fires Area? (Lab 5)"
+author: "Ye (Eric) Wang"
+date: "February 27, 2016"
+output: html_document
+---
+
+<!---
+To comment in a R markdown (rmd) file, use the html comment tag.
+For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+If you enclose a URL or email address in pointy brackets, it will become a link:
+-->
+Source: <http://archive.ics.uci.edu/ml/datasets/Forest+Fires>
+Reference: P. Cortez and A. Morais. A Data Mining Approach to Predict Forest Fires using Meteorological Data. In J. Neves, M. F. Santos and J. Machado Eds., New Trends in Artificial Intelligence, Proceedings of the 13th EPIA 2007 - Portuguese Conference on Artificial Intelligence, December, Guimarães, Portugal, pp. 512-523, 2007. APPIA, ISBN-13 978-989-95618-0-9.
+
+<!---
+Include headers
+Less "#" = bigger hearder
+# H1
+## H2
+### H3
+#### H4
+##### H5
+###### H6
+-->
+## Load the data
+<!---
+Embed Code:
+Use knitr syntax to embed R code into your report. 
+R will run the code and include the results when you render your report.
+-->
+```{r}
+forestfire <- read.csv("http://archive.ics.uci.edu/ml/machine-learning-databases/forest-fires/forestfires.csv")
+```
+
+## Preliminaries
+#### Define the question of interest. Review the design of the study (for thinking about model assumptions). Correct erros in the data.
+
+<!--
+To emphasize some text, surround it with *s or _
+To strong emphasize (bold) some text, surround it with **s or __
+-->
+This is a **difficult** regression task, where the aim is to _understand how the burned area of forest fires, in the northeast region of Portugal, is related to the meteorological and other data_. And below gives some details of the variables considered in this study.
+
+<!--
+list in rmd
+A bulleted list item begins with a bullet (*, +, or -).
+Ordered lists work just like bulleted lists, except that the items begin with enumerators rather than bullets.
+In standard markdown, enumerators are decimal numbers followed by a period and a space. The numbers themselves are ignored, so there is no difference between this list.
+List items may include other lists. In this case the preceding blank line is optional. The nested list must be indented four spaces or one tab.
+-->
+1. Spatial information
+    * X - x-axis spatial coordinate within the Montesinho park map: 1 to 9 
+    * Y - y-axis spatial coordinate within the Montesinho park map: 2 to 9 
+2. Temporal information
+    + month - month of the year: 'jan' to 'dec' 
+    + day - day of the week: 'mon' to 'sun'
+2. FWI: The forest Fire Weather Index (FWI) is the Canadian system for rating fire danger
+    - FFMC - FFMC index denotes the moisture content surface litter and influences ignition and fire spread: 18.7 to 96.20 
+    - DMC - DMC index represent the moisture content of shallow organic layers: 1.1 to 291.3 
+    - DC - DC index represent the moisture content of deep organic layers: 7.9 to 860.6 
+    - ISI - ISI index is a score that correlates with fire velocity spread: 0.0 to 56.10
+9. Meteorological information
+    - temp - temperature in Celsius degrees: 2.2 to 33.30 
+    - RH - relative humidity in %: 15.0 to 100 
+    - wind - wind speed in km/h: 0.40 to 9.40 
+    - rain - outside rain in mm/m2 : 0.0 to 6.4 
+5. area - the burned area of the forest (in ha): 0.00 to 1090.84 
+
+The first four rows denote the spatial and temporal attributes. Only two geographic features were included, the X and Y axis values where the fire occurred, since the type of vegetation presented a low quality (i.e. more than 80% of the values were missing). After consulting the Mon- tesinho fire inspector, we selected the month and day of the week temporal variables. Average monthly weather conditions are quite distinct, while the day of the week could also influence forest fires (e.g. work days vs weekend) since most fires have a human cause.
+
+## Explore the data
+####Look for initial answers to questions and for potential models.
+
+<!--Code and Syntax Highlighting: Inline `code` has back-ticks around it.-->
+Let us first explore our response variable `area`.
+
+```{r}
+attach(forestfire)
+hist( area, 40 )
+round(table(area==0)/nrow(forestfire),2) 
+```
+
+48% percent of the time there is no observation of a forest fire. This makes sense since there should be a positive probability that no forest fires are triggered at the time of observation.
+
+Then let us take a look at the distribution of areas that are not trivial. There is a clear right skewness and hence we try a log tranformation.
+
+<!--Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.-->
+```{r echo=FALSE}
+par(mfrow = c(1,2))
+hist( area[area>0], 40 )
+hist( sqrt(area[area>0]), 40 )
+```
+
+Can we build a regression model that takes into account this excessive number of zeroes? In the original paper the authors proposed to transform the responses using `ln(y+1)`. But that does not solve the problem, as can be seen below.
+
+```{r echo=FALSE}
+hist( area+1, 40 )
+hist( log(area+1), 40 )
+```
+
+Moreover, I personally think the transformation itself makes no sense since under such transformation y can be smaller than 0, which is nonsense! I think the best model to solve this type of problems is the zero-inflation models, but these modles are beyond the scope of this lab so I will simply proceed with the multiple linear regression approach. But I will only focus on a subset of the data where areas are above zero. In other words, I will try to predict the area of the  forest fires given that there is indeed a forest fire going on.
+
+```{r}
+par(mfrow=c(1,1))
+detach(forestfire)
+forestfire <- forestfire[forestfire$area>0,]
+# Let's explore the relationships between the response and the predictors
+boxplot(log(area)~as.factor(X), data = forestfire, xlab = "X", ylab = "fire area", main = "forest fire area for different X's")
+boxplot(log(area)~as.factor(Y), data = forestfire, xlab = "Y", ylab = "fire area", main = "forest fire area for different Y's")
+```
+
+It seems that there is no obvious relationship between the spatial locations and the fire area, hence, for simplicity, I decide not to consider these two predictors.
+
+```{r}
+boxplot(log(area)~month, data = forestfire, xlab = "month", ylab = "fire area", main = "forest fire area for different months")
+summary(forestfire$month)
+```
+
+So the numbers of observations fall into every months are very unbalanced. In fact many months only have few observations. This introduce a great risk of overfitting. Hence I recode the month predictor into a categorical predictor of different seasons.
+
+```{r}
+forestfire$season <- rep("spring", 270)
+for (i in 1:270){
+  if (forestfire$month[i] %in% c("feb","jan","dec")) forestfire$season[i] <- "winter"
+  if (forestfire$month[i] %in% c("oct","nov","sep")) forestfire$season[i] <- "autoumn"
+  if (forestfire$month[i] %in% c("aug","jul","jun")) forestfire$season[i] <- "summer"
+}
+forestfire$season <- as.factor(forestfire$season)
+forestfire$month <- NULL
+boxplot(log(area)~season, data = forestfire, xlab = "season", ylab = "fire area", main = "forest fire area for different seasons")
+reg_season <- lm(log(area)~season,data = forestfire)
+summary(reg_season)
+```
+
+Now we seem to find some evididence that summer might tend to  have less severe forest fires, probabliy due to the high humidity. This suggest that we should include season as a predictor in the model.
+
+```{r}
+boxplot(log(area)~day, data = forestfire, xlab = "day", ylab = "fire area", main = "forest fire area for different days")
+reg_day <- lm(log(area)~day,data = forestfire)
+summary(reg_day)
+```
+
+We seem to have some very mild evidence that Saturday tend to have more severe forest fires probably because of the increased human activities during weekends. We should also include day as a predictor.
+
+```{r}
+par(mfrow=c(3,3))
+plot(log(area) ~ FFMC + DMC + DC + ISI + temp + RH + wind + rain,
+     data = forestfire)
+par(mfrow=c(1,1))
+```
+
+After looking at the scatterplots of all these predictors, I didn't find any obvious non-linear trend so I will first simply considering including the linear terms.
+
+Last let us see if there is strong multi-colinearity in these continuous predictors.
+
+```{r}
+which(cor(forestfire[,4:11])>0.8)
+```
+
+Only diagonal elements exceed 0.8, seems that we do not need to worry about multi-colinearity.
+
+## Formulate an inferential model
+
+We start from the simplest model, without any interaction and quadratic terms.
+
+```{r}
+reg0 <- lm(log(area) ~season + day + FFMC + DMC + DC + ISI + temp + RH + wind + rain,
+           data = forestfire)
+summary(reg0)
+```
+
+As can be seen, the model fitting is terrible. This is not necessarily due to that we fit a bad model, it might simply because that the predictors we have do not have enough information to explain the responses. However, I decide to make one more try and hence I include the interaction terms between the four indices since I feel that the influece of these indices are not independent. I also include a quadratic term for wind and RH since I feel that the increase in fire area with respect to wind and the decrease in fire area  with respect to humidity might be faster than linear.
+
+```{r}
+reg1 <- lm(log(area) ~season + day + (FFMC + DMC + DC + ISI)^2 + temp + RH + wind + rain + I(wind^2) + I(RH^2),
+           data = forestfire)
+summary(reg1)
+```
+
+This seems to be much better compared to the first model, at least now we have a significant F test. But this model involves too many predicitor and with most of them not significant. So let us then do a backward selection.
+
+```{r}
+reg2 <- step(reg1, direction = "backward")
+summary(reg2)
+```
+
+We obtained a "optiaml" model with the help of backward selection based on AIC. We want to proceed to find the significant predictors and understand how the values  of these predictors are related to the areas of the fires (p-value, confidence intervals, t-statistics). But before doing that, let us first do some model checking.
+
+## Check the model.
+```{r}
+par(mfrow=c(2,2))
+plot(reg2)
+par(mfrow=c(1,1))
+```
+
+There is no obvious violation of model assumptions so we are good to go.
+
+Interpret the coefficients and commenting on the p-vals and the confidence interval.
+Will leave this part for you guys!
