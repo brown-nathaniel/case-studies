@@ -193,18 +193,23 @@ library(lme4)
 # add predictor for age group 
 dat <- transform(dat, age = ifelse((proto == "A" | proto == "B"), "juvenile", "adult"))
 
-reduced <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat, REML = FALSE)
-summary(reduced) 
-full <- lmer(log(blot) ~ dose1 + dose2 + age + (1|lab), data=dat, REML = FALSE)
-summary(full)
-anova(reduced, full)
+# RANDOM INTERCEPT MODEL
+m1.reduced <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat, REML = FALSE)
+summary(m1.reduced) 
+m1.full <- lmer(log(blot) ~ dose1 + dose2 + age + (1|lab), data=dat, REML = FALSE)
+summary(m1.full)
+anova(m1.reduced, m1.full)
+#Age group (juvenile versus adult) affected log(blot) weight (chi2=2211.7, p<2.2e-16), lowering log(blot) weight by 1.23277+-0.02(standard errors). 
+coef(full) #coeficients with random intercepts 
 
-#Age group (juvenile versus adult) affected log(blot) weight (chi2=2211.7, p<2.2e-16), lowering
 
+# but effect of doses may be different across different labs
+# RANDOM SLOPE MODEL
+m2 <- lmer(log(blot) ~ age + (dose1 + dose2 + 1|lab), data=dat, REML=FALSE)
+summary(m2)
+m3 <- lmer(log(blot) ~ age + (dose1 + dose2|age) + (1|lab), data=dat, REML=FALSE)
+summary(m3)
 
-
-m3 <- lmer(log(blot) ~ dose1 + dose2 + age + (1|lab), data=dat, REML = FALSE)
-summary(m3) #variance due to lab heterogeneity dropped from .33 to .17
 
 ```
 
