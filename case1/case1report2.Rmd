@@ -142,6 +142,25 @@ log(y) \sim \text{Norm}(\mu , \sigma^2)
 $$
 This naive approach assumes the blotted weight follows a normal distribution with constant variance. It does not account for lab-to-lab heterogeneity, which we illustrated with boxplots of log(Weight) by Lab. This results in an underestimation of the uncertainty in $\hat{\mu}$.
 
+```{r}
+lm1 <- lm(log(blot) ~ dose1 + dose2, data = dat)
+# check for multicolinearity in dose1 and dose2
+which(cor(dat[,4:5])>0.8)
+# Only diagonal elements exceed 0.8, seems that we do not need to worry about multi-colinearity.
+summary(lm1)
+# check model assumptions
+# 1. Linearity: check scatter plot
+plot(log(blot) ~ dose1 + dose2, data = dat)
+# 2. Equal Variance: Do points deviate from regression line equally? 
+# 3. Independence: randomness in residual plot 
+# 4. Normality: qq plot tails are weird
+par(mfrow=c(2,2))
+plot(reg2)
+par(mfrow=c(1,1))
+
+
+```
+
 #### Second Approach: Multivariate Normal
 $$
 y_i, \mu \in M_{n_i \times 1}( \Re)
