@@ -23,15 +23,13 @@ knitr::opts_chunk$set(echo = TRUE)
 library(ggplot2); library(dplyr); library(reshape2); library(knitr)
 ```
 
-### Exploratory Data Analysis 
-
-After loading the data, we noticed that there were several rows with missing (NA) values for weights. We decided to only remove the rows with missing values for blot weight or body weight (4 rows total). Since our main response variable of interest was blot weight, we decided to keep the observations with missing wet weight. 
 
 ```{r, warning=FALSE}
 dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
 dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
 ```
 
+<<<<<<< HEAD
 Initially, we plotted the blotted weights by body weights, and we noticed that the body weights seemed to be separated into two groups.
 
 ```{r, warning=FALSE}
@@ -107,60 +105,34 @@ ggplot(data = protoweights_long,
 ```
 
 Upon plotting all combinations of dosages across groups (each group represents a different combination of dose 1 and dose 2), we notice a couple of trends. First, we see that as the quantity of dose 1 increases without dose 2, the log blotted weight increases. Secondly, when dose 2 is introduced, an increase in quantity of dose 2 leads to a decrease in log blotted weight.
+=======
+### Initial Model-Fitting Results
+<!-- should contiain:
 
-```{r, warning=FALSE}
-dosage_groups <-  dat %>% 
-                  group_by(group) %>% 
-                  summarize(dose1 = unique(dose1), 
-                            dose2 = unique(dose2),
-                            A = sum(proto == "A"),
-                            B = sum(proto == "B"),
-                            C = sum(proto == "C"),
-                            D = sum(proto == "D")
-                  ) %>% as.data.frame()
-doselabels <- apply(dosage_groups[,c("dose1", "dose2")], 1, paste, collapse = ", ") %>% paste("(", ., ")", sep="")
+exploratory analysis???
+code for model
+description of how analysis was conducted
+problems that arose
+goodness-of-fit
 
-ggplot(data = dat ,
-       mapping=aes(x=as.factor(group), y=log(blot))) + 
-  geom_boxplot() + 
-  labs(title = "log(Blotted Weight) by Dosage",
-       x = "Combination of (Dose 1, Dose 2)",
-       y = "log(Blotted Weight)") +
-  scale_x_discrete(labels = doselabels) + 
-  theme(axis.text.x = element_text(angle = 45, hjust=1),
-        plot.title = element_text(hjust = 0.5))
-kable(dosage_groups)
-
-```
-
-### Possible Approaches to Analysis
-
+-->
 #### First Approach: Univariate Normal
 
 
 $$
 log(y) \sim \text{Norm}(\mu , \sigma^2)
 $$
-This naive approach assumes the blotted weight follows a normal distribution with constant variance. It does not account for lab-to-lab heterogeneity, which we illustrated with boxplots of log(Weight) by Lab. This results in an underestimation of the uncertainty in $\hat{\mu}$.
-
-```{r}
-lm1 <- lm(log(blot) ~ dose1 + dose2, data = dat)
-# check for multicolinearity in dose1 and dose2
-which(cor(dat[,4:5])>0.8)
-# Only diagonal elements exceed 0.8, seems that we do not need to worry about multi-colinearity.
-summary(lm1)
-# check model assumptions
-# 1. Linearity: check scatter plot
-plot(log(blot) ~ dose1 + dose2, data = dat)
-# 2. Equal Variance: Do points deviate from regression line equally? 
-# 3. Independence: randomness in residual plot 
-# 4. Normality: qq plot tails are weird
-par(mfrow=c(2,2))
-plot(reg2)
+```{r fig.width=15, fig.height=5}
+mod1 <- lm(log(blot) ~ 1, data = dat)
+par(mfrow=c(1,3))
+logmeans <- data.frame(blot = log(dat$blot), lmean =mean(log(dat$blot)) )
+plot(mod1,1) #resids vs fixed
+plot(mod1,2) #normal qq
+hist(mod1$residuals, breaks=25) #resids
 par(mfrow=c(1,1))
-
-
 ```
+
+This naive approach assumes the blotted weight follows a normal distribution with a mean centered around the mean log blotted weight (`r mean(log(dat$blot))`) constant variance. The diagnostic plots below show that the same value is predicted for each input, the quantiles of the data do not follow a normal distrbution, and that the residuals are bimodal. We believe bimodality may be caused by the separation of rats into children and adult protocols.
 
 #### Second Approach: Multivariate Normal
 $$
@@ -171,9 +143,32 @@ y_i, \mu \in M_{n_i \times 1}( \Re)
 log(y_i) \sim \text{MVNorm}(\mu, \Sigma)
 $$
 
-In this model,$y_i$ is a vector of $n_i$ observations from lab $i$. Each lab has an approximate normal distribution with a different mean.
+In this model,$y_i$ is a vector of $n_i$ observations from lab $i$. It assumes that the log blotted weights of each lab follow approximately normal distributions with a their own means.
 
-This accounts for heterogeneity between labs, however, as you add more structure (blocking factors, covariates for dosage, etc.) to the model, the covariance matrix becomes more complicated, and maximum likelihood estimation becomes unwieldy. Also, this model estimates parameters only for these $n$ groups, and does not apply to new groups without recalculation.
+```{r}
+
+mu_hat <- dat %>% group_by(lab) %>% summarize(blot = mean(blot)) %>% as.data.frame() 
+lab_names <- mu_hat[["lab"]]
+mu_hat <- mu_hat %>% '[['(2) %>% t()
+colnames(mu_hat) <- lab_names
+mod2 <- lm(log(mu_hat) ~ 1)
+```
+
+We provide the diagnosis plots for the first lab, `Basf`, and the rest can be found in Appendix 1.1, since R does not support plotting for multivariate regression models.
+```{r fig.width=15, fig.height=5}
+basf_data <- dat %>% filter(lab == "Basf") %>% select(blot) %>% log()
+fitvals <- predict(mod2, newdata=basf_data)[,1]
+resids <- fitvals - basf_data[[1]]
+par(mfrow=c(1,3))
+plot(fitvals, resids); abline(h=0) #residuals vs fitted values
+qqnorm(resids); qqline(resids) #normal qq plot
+hist(resids, breaks=25) #distribution of residuals
+par(mfrow=c(1,1))
+```
+
+The diagnostic plots for this model indicate that the model predicts the same fitted value for each input, and that the residual quantiles do not follow a normal distribution. For the first lab, the histogram of residuals is not bimodal like they are in the simpler $mod1$, but it does show left skew. These same problems, in addition to  multimodality of the residuals, are present for the diagnostic plots for the remaining labs in the Appendix. 
+
+A weakness of this model is that, as you add more structure (blocking factors, covariates for dosage, etc.) to the model, the covariance matrix becomes more complicated, and maximum likelihood estimation becomes unwieldy. Also, this model estimates parameters only for these $n$ groups, and does not apply to new groups without recalculation.
 
 
 #### Third Approach: Mixed Effects
@@ -251,3 +246,23 @@ As an alternative to the classical mixed effects model, hierarchical modeling of
 ### Contributions
 
 Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. 
+
+### Appendix
+
+#### 1.1 Multivariate Normal Diagnosis Plots
+```{r fig.height=5, fig.width=15}
+plot_mvn <- function(mod = NA, lab_name = NA){
+  lab_ind <- which(lab_names == lab_name)
+  newdat <- dat %>% filter(lab == lab_name) %>% select(blot) %>% log()
+  fitvals <- predict(mod, newdata=newdat)[,lab_ind]
+  resids <- fitvals - newdat[[1]]
+  plot(fitvals, resids); abline(h=0) #residuals vs fitted values
+  qqnorm(resids); qqline(resids) #normal qq plot
+  hist(resids, breaks=25) #distribution of residuals
+}
+par(mfrow = c(1,3))
+for(name in lab_names[-1]){
+  plot_mvn(mod2, name)
+}
+
+```
