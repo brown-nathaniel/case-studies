@@ -87,6 +87,7 @@ ggplot(data = labweights_long,
        color = "Weighed Object") +
   theme(axis.text.x = element_text(angle = 90, hjust=1),
         plot.title = element_text(hjust = 0.5))
+
 ```
 
 Next, we plotted the body and blotted weight observations according to the protocol that was applied. Again, we logged each of the weight values to account for data skew.
@@ -194,18 +195,22 @@ We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a
 ```{r}
 View(dat)
 library(lme4)
-m3 <- lmer(log(blot) ~ dose1 + dose2 + proto + (1|lab), data=dat, REML = FALSE)
-summary(m3)
-m4 <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat, REML = FALSE)
-summary(m4) # AIC score increased and variance in residuals increased (removed proto)
-# AIC: 5470, sd: .6628
+# add predictor for age group 
+dat <- transform(dat, age = ifelse((proto == "A" | proto == "B"), "juvenile", "adult"))
 
-# allow slope to vary as well as intercept
-m5 <- lmer(log(blot) ~ (dose1 + dose2 + proto + 1)|lab, data=dat, REML = FALSE)
-summary(m5) # correlation between protocols and dose is high, so remove from model
-m6 <- lmer(log(blot) ~ (dose1 + dose2 + 1)|lab, data=dat, REML = FALSE)
-summary(m6) # AIC score increased, variance in residuals increased (removed proto)
-#AIC: 5551, sd: .6631
+reduced <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat, REML = FALSE)
+summary(reduced) 
+full <- lmer(log(blot) ~ dose1 + dose2 + age + (1|lab), data=dat, REML = FALSE)
+summary(full)
+anova(reduced, full)
+
+#Age group (juvenile versus adult) affected log(blot) weight (chi2=2211.7, p<2.2e-16), lowering
+
+
+
+m3 <- lmer(log(blot) ~ dose1 + dose2 + age + (1|lab), data=dat, REML = FALSE)
+summary(m3) #variance due to lab heterogeneity dropped from .33 to .17
+
 ```
 
 #### Fourth Approach: Bayesian Hierarchical Model
