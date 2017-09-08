@@ -196,12 +196,16 @@ View(dat)
 library(lme4)
 m3 <- lmer(log(blot) ~ dose1 + dose2 + proto + (1|lab), data=dat, REML = FALSE)
 summary(m3)
-# correlation between protocols and dose is high, so remove from model
 m4 <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat, REML = FALSE)
-summary(m4)
+summary(m4) # AIC score increased and variance in residuals increased (removed proto)
+# AIC: 5470, sd: .6628
+
 # allow slope to vary as well as intercept
-m5 <- lmer(log(blot) ~ (dose1 + dose2 + 1)|lab, data=dat, REML = FALSE)
-summary(m5) # AIC score increased 
+m5 <- lmer(log(blot) ~ (dose1 + dose2 + proto + 1)|lab, data=dat, REML = FALSE)
+summary(m5) # correlation between protocols and dose is high, so remove from model
+m6 <- lmer(log(blot) ~ (dose1 + dose2 + 1)|lab, data=dat, REML = FALSE)
+summary(m6) # AIC score increased, variance in residuals increased (removed proto)
+#AIC: 5551, sd: .6631
 ```
 
 #### Fourth Approach: Bayesian Hierarchical Model
