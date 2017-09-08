@@ -191,6 +191,18 @@ Let $y_i$ be a $n_i \times 1$ vector of observations, where $i$ indicates the la
 
 We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a population distribution characterizing lab-to-lab variability. This allows our model to be generalizable to future labs. Furthermore, when calculating the MLE of each $\mu_i$, there is less variability because they are pulled in toward the grand mean $\mu$. This introduces bias, but the decrease in varaiance reults in an overall benefit for the MSE. 
 
+```{r}
+View(dat)
+library(lme4)
+m3 <- lmer(log(blot) ~ dose1 + dose2 + proto + (1|lab), data=dat, REML = FALSE)
+summary(m3)
+# correlation between protocols and dose is high, so remove from model
+m4 <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat, REML = FALSE)
+summary(m4)
+# allow slope to vary as well as intercept
+m5 <- lmer(log(blot) ~ (dose1 + dose2 + 1)|lab, data=dat, REML = FALSE)
+summary(m5) # AIC score increased 
+```
 
 #### Fourth Approach: Bayesian Hierarchical Model
 $$
