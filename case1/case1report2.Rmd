@@ -29,7 +29,6 @@ dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.str
 dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
 ```
 
-<<<<<<< HEAD
 Initially, we plotted the blotted weights by body weights, and we noticed that the body weights seemed to be separated into two groups.
 
 ```{r, warning=FALSE}
@@ -105,7 +104,7 @@ ggplot(data = protoweights_long,
 ```
 
 Upon plotting all combinations of dosages across groups (each group represents a different combination of dose 1 and dose 2), we notice a couple of trends. First, we see that as the quantity of dose 1 increases without dose 2, the log blotted weight increases. Secondly, when dose 2 is introduced, an increase in quantity of dose 2 leads to a decrease in log blotted weight.
-=======
+
 ### Initial Model-Fitting Results
 <!-- should contiain:
 
@@ -122,17 +121,21 @@ goodness-of-fit
 $$
 log(y) \sim \text{Norm}(\mu , \sigma^2)
 $$
+
 ```{r fig.width=15, fig.height=5}
 mod1 <- lm(log(blot) ~ 1, data = dat)
+resid_title <- "Residuals vs. Fitted Values"
+qq_title <- "Normal Quantile-Quantile"
+hist_title <- "Histogram of Residuals"
 par(mfrow=c(1,3))
 logmeans <- data.frame(blot = log(dat$blot), lmean =mean(log(dat$blot)) )
-plot(mod1,1) #resids vs fixed
-plot(mod1,2) #normal qq
-hist(mod1$residuals, breaks=25) #resids
+plot(mod1,1, main = resid_title, xlab = "")
+plot(mod1,2, main = qq_title, xlab = "")
+hist(mod1$residuals, breaks=25, main = hist_title, col="gray", xlab="")
 par(mfrow=c(1,1))
 ```
 
-This naive approach assumes the blotted weight follows a normal distribution with a mean centered around the mean log blotted weight (`r mean(log(dat$blot))`) constant variance. The diagnostic plots below show that the same value is predicted for each input, the quantiles of the data do not follow a normal distrbution, and that the residuals are bimodal. We believe bimodality may be caused by the separation of rats into children and adult protocols.
+This naive approach assumes the blotted weight follows a normal distribution with a mean centered around the mean of the log blotted weight (`r mean(log(dat$blot))`) constant variance. The diagnostic plots below show that the same value is predicted for each input, the quantiles of the data do not follow a normal distrbution, and that the residuals are bimodal. We believe bimodality may be caused by the separation of rats into children and adult protocols.
 
 #### Second Approach: Multivariate Normal
 $$
@@ -146,7 +149,6 @@ $$
 In this model,$y_i$ is a vector of $n_i$ observations from lab $i$. It assumes that the log blotted weights of each lab follow approximately normal distributions with a their own means.
 
 ```{r}
-
 mu_hat <- dat %>% group_by(lab) %>% summarize(blot = mean(blot)) %>% as.data.frame() 
 lab_names <- mu_hat[["lab"]]
 mu_hat <- mu_hat %>% '[['(2) %>% t()
@@ -154,15 +156,20 @@ colnames(mu_hat) <- lab_names
 mod2 <- lm(log(mu_hat) ~ 1)
 ```
 
-We provide the diagnosis plots for the first lab, `Basf`, and the rest can be found in Appendix 1.1, since R does not support plotting for multivariate regression models.
+We provide the diagnosis plots for the first lab, `Basf`, and we put the others in Appendix 1.1, since R does not support plotting for multivariate regression models.
 ```{r fig.width=15, fig.height=5}
-basf_data <- dat %>% filter(lab == "Basf") %>% select(blot) %>% log()
-fitvals <- predict(mod2, newdata=basf_data)[,1]
-resids <- fitvals - basf_data[[1]]
+plot_mvn <- function(mod = NA, lab_name = NA){
+  lab_ind <- which(lab_names == lab_name)
+  newdat <- dat %>% filter(lab == lab_name) %>% select(blot) %>% log()
+  fitvals <- predict(mod, newdata=newdat)[,lab_ind]
+  resids <- fitvals - newdat[[1]]
+  plot(fitvals, resids, main=paste(resid_title, ": ", lab_name, " Lab", sep="")); abline(h=0)
+  qqnorm(resids, main=paste(resid_title, ": ", lab_name, " Lab", sep="")); qqline(resids) 
+  hist(resids, breaks=25, main=paste(resid_title, ": ", lab_name, " Lab", sep=""), col="gray")
+}
+
 par(mfrow=c(1,3))
-plot(fitvals, resids); abline(h=0) #residuals vs fitted values
-qqnorm(resids); qqline(resids) #normal qq plot
-hist(resids, breaks=25) #distribution of residuals
+plot_mvn(mod2, "Basf")
 par(mfrow=c(1,1))
 ```
 
@@ -256,15 +263,6 @@ Nathaniel Brown made the visualizations for this report. He also organized the r
 
 #### 1.1 Multivariate Normal Diagnosis Plots
 ```{r fig.height=5, fig.width=15}
-plot_mvn <- function(mod = NA, lab_name = NA){
-  lab_ind <- which(lab_names == lab_name)
-  newdat <- dat %>% filter(lab == lab_name) %>% select(blot) %>% log()
-  fitvals <- predict(mod, newdata=newdat)[,lab_ind]
-  resids <- fitvals - newdat[[1]]
-  plot(fitvals, resids); abline(h=0) #residuals vs fitted values
-  qqnorm(resids); qqline(resids) #normal qq plot
-  hist(resids, breaks=25) #distribution of residuals
-}
 par(mfrow = c(1,3))
 for(name in lab_names[-1]){
   plot_mvn(mod2, name)
