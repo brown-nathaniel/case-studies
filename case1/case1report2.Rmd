@@ -16,6 +16,8 @@ do not use group! it provides no new information.
 2 recommended approaches to analyze data are as:
   freq mixed effects (lme4::lmer)
   bayesian hierarchical (rstan, rjags)
+  
+3-5 pages of text
 -->
 
 ```{r setup, include=FALSE}
@@ -211,16 +213,18 @@ summary(m1.full)
 anova(m1.reduced, m1.full)
 ```
 
-In our previous random intercept model, we account for baseline differences between labs, but we also assume that the effects of the categorical variable proto is the same for each lab. This is not a valid assumption to make, so we introduce a random slope model. Now, proto has a random slope. 
+In our previous random intercept model, we account for baseline differences between labs, but we also assume that the effects of the categorical variable proto is the same for each lab. This is not a valid assumption to make, so we introduce a random slope model. Now, proto, dose1, and dose2 have varying slopes. 
 
-In this random slope model, we see that the fit is comparable to that of the random intercept model. However, we also see that the variability due to sources other than the random effects (lab, protocol) is 0.189 (decreased from 0.192). 
+In this random slope model, more variability is associated with lab to lab heterogeneity (1.72, up from .03). We also see that the variability due to sources other than the random effects is 0.186 (decreased from 0.192). 
 
 ```{r}
 # RANDOM SLOPE MODEL
-m2 <- lmer(log(blot) ~ dose1 + dose2 + (proto + 1|lab), data=dat, REML=FALSE)
+m2 <- lmer(log(blot) ~ (dose1 + dose2 + proto + 1|lab), data=dat, REML=FALSE)
 summary(m2)
-
 ```
+
+if you plot the line for each lab and they look similar, the dose response is probably reliable 
+if there's a ton of variance, it's probably not reliable because there's a lot of variability between labs 
 
 #### Fourth Approach: Bayesian Hierarchical Model
 $$
