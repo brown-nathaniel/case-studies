@@ -213,7 +213,7 @@ anova(m1.reduced, m1.full)
 
 In our previous random intercept model, we account for baseline differences between labs, but we also assume that the effects of the categorical variable proto is the same for each lab. This is not a valid assumption to make, so we introduce a random slope model. Now, proto has a random slope. 
 
-In this random slope model, we see that the fit is comparable to that of the random intercept model. The AIC is 3285 (increased a bit from 3260), the variability due to lab is 0.039 (increased from 0.030), and the variability due to sources other than lab and protocol is 0.189 (decreased from 0.192). 
+In this random slope model, we see that the fit is comparable to that of the random intercept model. However, we also see that the variability due to sources other than the random effects (lab, protocol) is 0.189 (decreased from 0.192). 
 
 ```{r}
 # RANDOM SLOPE MODEL
