@@ -5,7 +5,8 @@ date: "September 6, 2017"
 output: html_document
 ---
 
-<!--
+<!--         THESE ARE NOT MERGE CONFLICTS
+
 we are interested in estimating dose response curve!
 therefore we want to treat dose as a continuous variable.
 does response curve vary across labs? estimate the variation between labs.
@@ -16,6 +17,19 @@ do not use group! it provides no new information.
 2 recommended approaches to analyze data are as:
   freq mixed effects (lme4::lmer)
   bayesian hierarchical (rstan, rjags)
+  
+  ----------------------------------------------------
+AT MINIMUM you should have (1+proto+dose|labs)
+random inter, proto, dose, that all "interact" with lab
+
+our final analysis should be on variation of intercepts and slopes
+how we summarize it is up to us
+Jonathan suggests looking at joint dist of (dose,lab) then 
+then sample a bunch of intercepts and slopes from dist
+then plotting them all together and making sure slopes aren't highly varying and criss-crossed
+(you don't have to do it this way, but this is Jonathan's way)
+
+also, correlations come from summary function?
 -->
 
 ```{r setup, include=FALSE}
@@ -222,6 +236,7 @@ summary(m2)
 
 ```
 
+
 #### Fourth Approach: Bayesian Hierarchical Model
 $$
 y_i \in M_{n_i \times 1}( \Re)
@@ -294,7 +309,7 @@ schools <- stan(model_code = stanstring,
 dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
 dat <- dat[!(is.na(dat$blot) | is.na(dat$body) | is.na(dat$wet)),]
 dat_list = as.list(dat)
-dat_list$N = 2666
+dat_list$N = length(dat$blot)
 dat_list$dose12 = dat_list$dose1 * dat_list$dose2
 
 stan_model2 = strwrap("
@@ -310,14 +325,18 @@ parameters {
   real beta1;
   real beta2;
   real beta3;
-  real<lower=0> sigma;
+  real<lower=0> sigma2;
 }
 model {
-  blot ~ normal(alpha + beta1 * dose1 + beta2 * dose2 + beta3 * dose12, sigma);
+  beta1 ~ normal(0,1);
+  beta2 ~ normal(0,1);
+  beta3 ~ normal(0,1);
+  sigma2 ~ inv_gamma(0.5, 12.5);
+  blot ~ normal(alpha + beta1 * dose1 + beta2 * dose2 + beta3 * dose12, sqrt(sigma2));
 }")
 
 fit <- stan(model_code=stan_model2, data = dat_list, 
-            iter = 200, chains = 2)
+            iter = 200, chains = 1, control = list(max_treedepth = 15))
 ```
 ### Contributions
 
