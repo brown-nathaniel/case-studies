@@ -328,10 +328,10 @@ parameters {
   real<lower=0> sigma2;
 }
 model {
-  beta1 ~ normal(0,1);
-  beta2 ~ normal(0,1);
-  beta3 ~ normal(0,1);
-  sigma2 ~ inv_gamma(0.5, 12.5);
+  beta1;
+  beta2;
+  beta3;
+  sigma2;
   blot ~ normal(alpha + beta1 * dose1 + beta2 * dose2 + beta3 * dose12, sqrt(sigma2));
 }")
 
