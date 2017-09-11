@@ -306,4 +306,358 @@ for(name in lab_names[-1]){
   plot_mvn(mod2, name)
 }
 
+=======
+---
+title: "Case 1"
+author: "Nathaniel Brown, Annie Tang, William Yang"
+date: "September 6, 2017"
+output: html_document
+---
+
+<!--         THESE ARE NOT MERGE CONFLICTS
+
+we are interested in estimating dose response curve!
+therefore we want to treat dose as a continuous variable.
+does response curve vary across labs? estimate the variation between labs.
+
+group i in different lab should not be treated as the same group.
+do not use group! it provides no new information.
+
+2 recommended approaches to analyze data are as:
+  freq mixed effects (lme4::lmer)
+  bayesian hierarchical (rstan, rjags)
+  
+  ----------------------------------------------------
+AT MINIMUM you should have (1+proto+dose|labs)
+random inter, proto, dose, that all "interact" with lab
+
+our final analysis should be on variation of intercepts and slopes
+how we summarize it is up to us
+Jonathan suggests looking at joint dist of (dose,lab) then 
+then sample a bunch of intercepts and slopes from dist
+then plotting them all together and making sure slopes aren't highly varying and criss-crossed
+(you don't have to do it this way, but this is Jonathan's way)
+
+also, correlations come from summary function?
+-->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan)
+```
+
+
+```{r, warning=FALSE}
+dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
+dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
+```
+
+Initially, we plotted the blotted weights by body weights, and we noticed that the body weights seemed to be separated into two groups.
+
+```{r, warning=FALSE}
+weights <- dat[,c("body", "blot")]
+ggplot(data = weights, 
+       mapping = aes(x=body, y=blot)) + 
+  geom_point() + 
+  labs(title="Blotted Weight vs. Body Weight",
+       x="Body Weight",
+       y="Blotted Weight"
+       ) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+But after color coding the chart by protocol (A,B,C,D) we noticed that the A & B protocols were grouped together and the C & D protocols were grouped together. In class, we were told that two experimental models were used, one for juvenile female rats and another for adult female ovariectomized rats; we were also told that each experimental model was associated with two protocols each. Based on this knowledge, we suspect that the gap in observed weights is likely due to A & B protocols consisting of juvenile (i.e. smaller) rats. 
+
+```{r, warning=FALSE}
+grpweights <- dat[,c("body", "blot","lab", "proto", "group")]
+
+ggplot(data = grpweights, 
+       mapping = aes(x=body, y=blot, color=proto)) + 
+  geom_point() +
+  labs(title="Blotted Weight vs. Body Weight",
+       x="Body Weight",
+       y="Blotted Weight",
+       color="Protocol"
+       ) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+We then created boxplots of body and blotted weight observations across each lab. The data appeared to be right skewed, so we took the log of the response variable and replotted. The resulting boxplots appear to be more normally distributed. It also appears that all the weights vary by lab. It is also worthwhile to note that body weight and uterus weight are not measured on the same scale, but we were not given the units used for either. So, the relative size of each box plot is not to scale. 
+
+
+```{r, warning=FALSE}
+labweights <- dat[,c("body", "blot", "lab")]
+labweights_long <- melt(labweights, id="lab")
+ggplot(data = labweights_long,
+       mapping = aes(x=lab, y=value, color = variable)) +
+  geom_boxplot() + 
+  labs(title = "Weight by Lab",
+       x = "Lab",
+       y = "Weight",
+       color = "Weighed Object") +
+  theme(axis.text.x = element_text(angle = 90, hjust=1),
+        plot.title = element_text(hjust = 0.5))
+
+ggplot(data = labweights_long,
+       mapping = aes(x=lab, y=log(value), color = variable)) + 
+  geom_boxplot() + 
+  labs(title = "log(Weight) by Lab",
+       x = "Lab",
+       y = "log(Weight)",
+       color = "Weighed Object") +
+  theme(axis.text.x = element_text(angle = 90, hjust=1),
+        plot.title = element_text(hjust = 0.5))
+
+```
+
+Next, we plotted the body and blotted weight observations according to the protocol that was applied. Again, we logged each of the weight values to account for data skew.
+
+```{r, warning=FALSE}
+protoweights <- dat[,c("body", "blot", "proto")]
+protoweights_long <- melt(protoweights, id="proto")
+ggplot(data = protoweights_long,
+       mapping = aes(x=proto, y=log(value), color = variable)) + 
+  geom_boxplot() +
+  labs(title = "log(Weight) by Protocol",
+       x = "Protocol",
+       y = "log(Weight)",
+       color = "Weighed Object") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+Upon plotting all combinations of dosages across groups (each group represents a different combination of dose 1 and dose 2), we notice a couple of trends. First, we see that as the quantity of dose 1 increases without dose 2, the log blotted weight increases. Secondly, when dose 2 is introduced, an increase in quantity of dose 2 leads to a decrease in log blotted weight.
+
+### Initial Model-Fitting Results
+<!-- should contiain:
+
+exploratory analysis???
+code for model
+description of how analysis was conducted
+problems that arose
+goodness-of-fit
+
+-->
+#### First Approach: Univariate Normal
+
+
+$$
+log(y) \sim \text{Norm}(\mu , \sigma^2)
+$$
+
+```{r fig.width=15, fig.height=5}
+mod1 <- lm(log(blot) ~ 1, data = dat)
+resid_title <- "Residuals vs. Fitted Values"
+qq_title <- "Normal Quantile-Quantile"
+hist_title <- "Histogram of Residuals"
+par(mfrow=c(1,3))
+logmeans <- data.frame(blot = log(dat$blot), lmean =mean(log(dat$blot)) )
+plot(mod1,1)
+plot(mod1,2)
+hist(mod1$residuals, breaks=25, main = hist_title, col="gray", xlab="")
+par(mfrow=c(1,1))
+```
+
+This naive approach assumes the blotted weight follows a normal distribution with a mean centered around the mean of the log blotted weight (`r mean(log(dat$blot))`) constant variance. The diagnostic plots below show that the same value is predicted for each input, the quantiles of the data do not follow a normal distrbution, and that the residuals are bimodal. We believe bimodality may be caused by the separation of rats into children and adult protocols.
+
+#### Second Approach: Multivariate Normal
+$$
+y_i, \mu \in M_{n_i \times 1}( \Re)
+\\
+\Sigma \in M_{n \times n}( \Re)
+\\ 
+log(y_i) \sim \text{MVNorm}(\mu, \Sigma)
+$$
+
+In this model,$y_i$ is a vector of $n_i$ observations from lab $i$. It assumes that the log blotted weights of each lab follow approximately normal distributions with a their own means.
+
+```{r}
+mu_hat <- dat %>% group_by(lab) %>% summarize(blot = mean(blot)) %>% as.data.frame() 
+lab_names <- mu_hat[["lab"]]
+mu_hat <- mu_hat %>% '[['(2) %>% t()
+colnames(mu_hat) <- lab_names
+mod2 <- lm(log(mu_hat) ~ 1)
+```
+
+We provide the diagnosis plots for the first lab, `Basf`, and we put the others in Appendix 1.1, since R does not support plotting for multivariate regression models.
+```{r fig.width=15, fig.height=5}
+plot_mvn <- function(mod = NA, lab_name = NA){
+  lab_ind <- which(lab_names == lab_name)
+  newdat <- dat %>% filter(lab == lab_name) %>% select(blot) %>% log()
+  fitvals <- predict(mod, newdata=newdat)[,lab_ind]
+  resids <- fitvals - newdat[[1]]
+  plot(fitvals, resids, main=paste(resid_title, ": ", lab_name, " Lab", sep=""), xlab = "Fitted Values", ylab = "Residuals"); abline(h=0)
+  qqnorm(resids, main=paste(qq_title, ": ", lab_name, " Lab", sep="")); qqline(resids) 
+  hist(resids, breaks=25, main=paste(hist_title, ": ", lab_name, " Lab", sep=""), xlab = "Residuals", col="gray")
+}
+
+par(mfrow=c(1,3))
+plot_mvn(mod2, "Basf")
+par(mfrow=c(1,1))
+```
+
+The diagnostic plots for this model indicate that the model predicts the same fitted value for each input, and that the residual quantiles do not follow a normal distribution. For the first lab, the histogram of residuals is not bimodal like they are in the simpler $mod1$, but it does show left skew. These same problems, in addition to  multimodality of the residuals, are present for the diagnostic plots for the remaining labs in the Appendix. 
+
+A weakness of this model is that, as you add more structure (blocking factors, covariates for dosage, etc.) to the model, the covariance matrix becomes more complicated, and maximum likelihood estimation becomes unwieldy. Also, this model estimates parameters only for these $n$ groups, and does not apply to new groups without recalculation.
+
+
+#### Third Approach: Mixed Effects
+
+$$
+y_i \in M_{n_i \times 1}( \Re)
+\\
+\mu_i \sim \text{Norm}(\mu, \psi^2)
+\\
+\sigma_i^2 \sim \text{IG}(\nu/2, \nu\sigma^2/2)
+\\
+y_{ij} \sim \text{Norm}(\mu_i, \sigma^2_i)
+$$
+
+Let $y_i$ be a $n_i \times 1$ vector of observations, where $i$ indicates the lab and $n_i$ is equal to the number of observations within lab $i$. So, $y_{ij}$ represents an individual observation for subject $j$ within lab $i$. We apply a Gaussian assumption here and say that each observation is normally distributed for some $\mu_i$ and $\sigma^2_i$. 
+
+We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a population distribution characterizing lab-to-lab variability. This allows our model to be generalizable to future labs. Furthermore, when calculating the MLE of each $\mu_i$, there is less variability because they are pulled in toward the grand mean $\mu$. This introduces bias, but the decrease in varaiance results in an overall benefit for the MSE.
+
+##### Analysis
+
+In our analysis, we choose to add a random effect for the lab variable, in order to account for lab-to-lab heterogeneity. Essentially, this allows us to avoid violating an independence assumption by assuming a different baseline response for each lab. First, we model these differences between individual labs by assuming random intercepts for each lab. We first include only dose1 and dose2 as fixed effects, then introduce proto as a fixed effect after confirming (through anova; p<2.2e-16, chi2=2216.3) that it is a significant predictor.
+
+
+With this full model, we see that the variability due to lab is 0.030 (in terms of variance), and variability due to non-lab sources is 0.192. And when we take a look at the fixed effects, we see that an increase in the amount of dose1 corresponds to an increase (0.143 units) in the response variable, log(blot). Furthermore, an increase in the amount of dose2 corresponds to a decrease (-0.508 units) in the response variable. Protocols B, C, and D all lead to an increase in the response variable, relative to protocol A. 
+
+```{r}
+library(lme4)
+# RANDOM INTERCEPT MODEL
+m1.reduced <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat, REML = FALSE)
+summary(m1.reduced) 
+m1.full <- lmer(log(blot) ~ dose1 + dose2 + proto + (1|lab), data=dat, REML = FALSE)
+summary(m1.full)
+anova(m1.reduced, m1.full)
+```
+
+In our previous random intercept model, we account for baseline differences between labs, but we also assume that the effects of the categorical variable proto is the same for each lab. This is not a valid assumption to make, so we introduce a random slope model. Now, proto has a random slope. 
+
+In this random slope model, we see that the fit is comparable to that of the random intercept model. However, we also see that the variability due to sources other than the random effects (lab, protocol) is 0.189 (decreased from 0.192). 
+
+```{r}
+# RANDOM SLOPE MODEL
+m2 <- lmer(log(blot) ~ dose1 + dose2 + (proto + 1|lab), data=dat, REML=FALSE)
+summary(m2)
+
+```
+
+
+#### Fourth Approach: Bayesian Hierarchical Model
+$$
+y_i \in M_{n_i \times 1}( \Re)
+\\
+\mu \sim \text{Norm}(\mu_0, \tau_0^2)
+\\
+\psi^2 \sim \text{IG}(\eta_0/2, \eta_0\psi_0^2/2)
+\\
+\mu_i \sim \text{Norm}(\mu, \psi^2)
+\\
+\theta_1 \sim \text{Norm}(\theta_{01}, \tau_{01}^2)
+\\
+\theta_2 \sim \text{Norm}(\theta_{02}, \tau_{02}^2)
+\\
+\theta_3 \sim \text{Norm}(\theta_{03}, \tau_{03}^2)
+\\
+\sigma_1^2 \sim \text{IG}(\nu_{01}/2, \nu_{01}\sigma_{01}^2/2)
+\\
+\sigma_2^2 \sim \text{IG}(\nu_{02}/2, \nu_{02}\sigma_{02}^2/2)
+\\
+\sigma_3^2 \sim \text{IG}(\nu_{03}/2, \nu_{03}\sigma_{03}^2/2)
+\\
+\beta_{1i} \sim \text{Norm}(\theta_{1}, \sigma^2_{1})
+\\
+\beta_{2i} \sim \text{Norm}(\theta_{2}, \sigma^2_{2})
+\\
+\beta_{3i} \sim \text{Norm}(\theta_{3}, \sigma^2_{3})
+\\
+\epsilon_{ij} \sim \text{Norm}(0, \sigma^2)
+\\
+y_{ij} = \mu_i + \beta_{1i}x_{1ij} + \beta_{2i}x_{2ij} + \beta_{3i}x_{1ij}x_{2ij} + \epsilon_{ij}
+$$
+
+As an alternative to the classical mixed effects model, hierarchical modeling offers a Bayesian, but essentially equivalent approach. We also added fixed linear effects for the dosages, since the purpose of this study is to investigate the variation of the dosage response curve in different labs. $x_{kij}$ represents the amount of dose $k$ on patient $ij$. The interaction effect is included because dose 2 appears only at a certain level of dose 1.
+
+#STEALING RSTAN CODE
+```{r}
+stanstring <- "
+data {
+  int<lower=0> J;          // # schools
+  real y[J];               // estimated treatment
+  real<lower=0> sigma[J];  // std err of effect
+}
+  parameters {
+  real theta[J];           // school effect
+  real mu;                 // mean for schools
+  real<lower=0> tau;       // variance between schools
+}
+model {
+  theta ~ normal(mu, tau);
+  y ~ normal(theta, sigma);
+}
+"
+
+
+datalist <- list(
+  y = c(28, 8, -3, 7, -1, 1, 18, 12),
+  sigma = c(15, 10, 1, 11, 9, 11, 10, 18)
+)
+datalist$J = length(datalist[["y"]])
+schools <- stan(model_code = stanstring, 
+                data = datalist,
+                pars = c("theta", "mu", "tau"),
+                iter = 1000, chains = 1
+)
+```
+
+# Messy RSTAN code
+```{r}
+dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
+dat <- dat[!(is.na(dat$blot) | is.na(dat$body) | is.na(dat$wet)),]
+dat_list = as.list(dat)
+dat_list$N = length(dat$blot)
+dat_list$dose12 = dat_list$dose1 * dat_list$dose2
+
+stan_model2 = strwrap("
+data {
+  int<lower=0> N;
+  vector[N] dose1;
+  vector[N] dose2;
+  vector[N] dose12;
+  vector[N] blot;
+}
+parameters {
+  real alpha;
+  real beta1;
+  real beta2;
+  real beta3;
+  real<lower=0> sigma2;
+}
+model {
+  beta1 ~ normal(0,1);
+  beta2 ~ normal(0,1);
+  beta3 ~ normal(0,1);
+  sigma2 ~ inv_gamma(0.5, 12.5);
+  blot ~ normal(alpha + beta1 * dose1 + beta2 * dose2 + beta3 * dose12, sqrt(sigma2));
+}")
+
+fit <- stan(model_code=stan_model2, data = dat_list, 
+            iter = 200, chains = 1, control = list(max_treedepth = 15))
+```
+### Contributions
+
+Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. 
+
+### Appendix
+
+#### 1.1 Multivariate Normal Diagnosis Plots
+```{r fig.height=5, fig.width=15, include = FALSE}
+par(mfrow = c(1,3))
+for(name in lab_names[-1]){
+  plot_mvn(mod2, name)
+}
+
 ```
