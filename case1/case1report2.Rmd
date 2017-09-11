@@ -20,7 +20,7 @@ do not use group! it provides no new information.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(ggplot2); library(dplyr); library(reshape2); library(knitr)
+library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan)
 ```
 
 
@@ -257,7 +257,7 @@ As an alternative to the classical mixed effects model, hierarchical modeling of
 
 #STEALING RSTAN CODE
 ```{r}
-"
+stanstring <- "
 data {
   int<lower=0> J;          // # schools
   real y[J];               // estimated treatment
@@ -273,6 +273,18 @@ model {
   y ~ normal(theta, sigma);
 }
 "
+
+
+datalist <- list(
+  y = c(28, 8, -3, 7, -1, 1, 18, 12),
+  sigma = c(15, 10, 1, 11, 9, 11, 10, 18)
+)
+datalist$J = length(datalist[["y"]])
+schools <- stan(model_code = stanstring, 
+                data = datalist,
+                pars = c("theta", "mu", "tau"),
+                iter = 1000, chains = 1
+)
 ```
 
 ### Contributions
@@ -282,7 +294,7 @@ Nathaniel Brown made the visualizations for this report. He also organized the r
 ### Appendix
 
 #### 1.1 Multivariate Normal Diagnosis Plots
-```{r fig.height=5, fig.width=15}
+```{r fig.height=5, fig.width=15, include = FALSE}
 par(mfrow = c(1,3))
 for(name in lab_names[-1]){
   plot_mvn(mod2, name)
