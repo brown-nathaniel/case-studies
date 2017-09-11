@@ -129,8 +129,8 @@ qq_title <- "Normal Quantile-Quantile"
 hist_title <- "Histogram of Residuals"
 par(mfrow=c(1,3))
 logmeans <- data.frame(blot = log(dat$blot), lmean =mean(log(dat$blot)) )
-plot(mod1,1, main = resid_title, xlab = "")
-plot(mod1,2, main = qq_title, xlab = "")
+plot(mod1,1)
+plot(mod1,2)
 hist(mod1$residuals, breaks=25, main = hist_title, col="gray", xlab="")
 par(mfrow=c(1,1))
 ```
@@ -163,9 +163,9 @@ plot_mvn <- function(mod = NA, lab_name = NA){
   newdat <- dat %>% filter(lab == lab_name) %>% select(blot) %>% log()
   fitvals <- predict(mod, newdata=newdat)[,lab_ind]
   resids <- fitvals - newdat[[1]]
-  plot(fitvals, resids, main=paste(resid_title, ": ", lab_name, " Lab", sep="")); abline(h=0)
-  qqnorm(resids, main=paste(resid_title, ": ", lab_name, " Lab", sep="")); qqline(resids) 
-  hist(resids, breaks=25, main=paste(resid_title, ": ", lab_name, " Lab", sep=""), col="gray")
+  plot(fitvals, resids, main=paste(resid_title, ": ", lab_name, " Lab", sep=""), xlab = "Fitted Values", ylab = "Residuals"); abline(h=0)
+  qqnorm(resids, main=paste(qq_title, ": ", lab_name, " Lab", sep="")); qqline(resids) 
+  hist(resids, breaks=25, main=paste(hist_title, ": ", lab_name, " Lab", sep=""), xlab = "Residuals", col="gray")
 }
 
 par(mfrow=c(1,3))
@@ -207,7 +207,7 @@ m1.full <- lmer(log(blot) ~ dose1 + dose2 + age + (1|lab), data=dat, REML = FALS
 summary(m1.full)
 anova(m1.reduced, m1.full)
 #Age group (juvenile versus adult) affected log(blot) weight (chi2=2211.7, p<2.2e-16), lowering log(blot) weight by 1.23277+-0.02(standard errors). 
-coef(full) #coeficients with random intercepts 
+coef(m1.full) #coeficients with random intercepts 
 
 
 # but effect of doses may be different across different labs
@@ -254,6 +254,26 @@ y_{ij} = \mu_i + \beta_{1i}x_{1ij} + \beta_{2i}x_{2ij} + \beta_{3i}x_{1ij}x_{2ij
 $$
 
 As an alternative to the classical mixed effects model, hierarchical modeling offers a Bayesian, but essentially equivalent approach. We also added fixed linear effects for the dosages, since the purpose of this study is to investigate the variation of the dosage response curve in different labs. $x_{kij}$ represents the amount of dose $k$ on patient $ij$. The interaction effect is included because dose 2 appears only at a certain level of dose 1.
+
+#STEALING RSTAN CODE
+```{r}
+"
+data {
+  int<lower=0> J;          // # schools
+  real y[J];               // estimated treatment
+  real<lower=0> sigma[J];  // std err of effect
+}
+  parameters {
+  real theta[J];           // school effect
+  real mu;                 // mean for schools
+  real<lower=0> tau;       // variance between schools
+}
+model {
+  theta ~ normal(mu, tau);
+  y ~ normal(theta, sigma);
+}
+"
+```
 
 ### Contributions
 
