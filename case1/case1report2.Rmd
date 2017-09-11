@@ -20,7 +20,7 @@ do not use group! it provides no new information.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(ggplot2); library(dplyr); library(reshape2); library(knitr)
+library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan)
 ```
 
 
@@ -129,8 +129,8 @@ qq_title <- "Normal Quantile-Quantile"
 hist_title <- "Histogram of Residuals"
 par(mfrow=c(1,3))
 logmeans <- data.frame(blot = log(dat$blot), lmean =mean(log(dat$blot)) )
-plot(mod1,1, main = resid_title, xlab = "")
-plot(mod1,2, main = qq_title, xlab = "")
+plot(mod1,1)
+plot(mod1,2)
 hist(mod1$residuals, breaks=25, main = hist_title, col="gray", xlab="")
 par(mfrow=c(1,1))
 ```
@@ -163,9 +163,9 @@ plot_mvn <- function(mod = NA, lab_name = NA){
   newdat <- dat %>% filter(lab == lab_name) %>% select(blot) %>% log()
   fitvals <- predict(mod, newdata=newdat)[,lab_ind]
   resids <- fitvals - newdat[[1]]
-  plot(fitvals, resids, main=paste(resid_title, ": ", lab_name, " Lab", sep="")); abline(h=0)
-  qqnorm(resids, main=paste(resid_title, ": ", lab_name, " Lab", sep="")); qqline(resids) 
-  hist(resids, breaks=25, main=paste(resid_title, ": ", lab_name, " Lab", sep=""), col="gray")
+  plot(fitvals, resids, main=paste(resid_title, ": ", lab_name, " Lab", sep=""), xlab = "Fitted Values", ylab = "Residuals"); abline(h=0)
+  qqnorm(resids, main=paste(qq_title, ": ", lab_name, " Lab", sep="")); qqline(resids) 
+  hist(resids, breaks=25, main=paste(hist_title, ": ", lab_name, " Lab", sep=""), xlab = "Residuals", col="gray")
 }
 
 par(mfrow=c(1,3))
@@ -257,6 +257,38 @@ $$
 
 As an alternative to the classical mixed effects model, hierarchical modeling offers a Bayesian, but essentially equivalent approach. We also added fixed linear effects for the dosages, since the purpose of this study is to investigate the variation of the dosage response curve in different labs. $x_{kij}$ represents the amount of dose $k$ on patient $ij$. The interaction effect is included because dose 2 appears only at a certain level of dose 1.
 
+#STEALING RSTAN CODE
+```{r}
+stanstring <- "
+data {
+  int<lower=0> J;          // # schools
+  real y[J];               // estimated treatment
+  real<lower=0> sigma[J];  // std err of effect
+}
+  parameters {
+  real theta[J];           // school effect
+  real mu;                 // mean for schools
+  real<lower=0> tau;       // variance between schools
+}
+model {
+  theta ~ normal(mu, tau);
+  y ~ normal(theta, sigma);
+}
+"
+
+
+datalist <- list(
+  y = c(28, 8, -3, 7, -1, 1, 18, 12),
+  sigma = c(15, 10, 1, 11, 9, 11, 10, 18)
+)
+datalist$J = length(datalist[["y"]])
+schools <- stan(model_code = stanstring, 
+                data = datalist,
+                pars = c("theta", "mu", "tau"),
+                iter = 1000, chains = 1
+)
+```
+
 ### Contributions
 
 Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. 
@@ -264,7 +296,7 @@ Nathaniel Brown made the visualizations for this report. He also organized the r
 ### Appendix
 
 #### 1.1 Multivariate Normal Diagnosis Plots
-```{r fig.height=5, fig.width=15}
+```{r fig.height=5, fig.width=15, include = FALSE}
 par(mfrow = c(1,3))
 for(name in lab_names[-1]){
   plot_mvn(mod2, name)
