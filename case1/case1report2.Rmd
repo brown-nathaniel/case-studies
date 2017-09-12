@@ -5,38 +5,10 @@ date: "September 6, 2017"
 output: html_document
 ---
 
-<!--         THESE ARE NOT MERGE CONFLICTS
-
-we are interested in estimating dose response curve!
-therefore we want to treat dose as a continuous variable.
-does response curve vary across labs? estimate the variation between labs.
-
-group i in different lab should not be treated as the same group.
-do not use group! it provides no new information.
-
-2 recommended approaches to analyze data are as:
-  freq mixed effects (lme4::lmer)
-  bayesian hierarchical (rstan, rjags)
-  
-  ----------------------------------------------------
-AT MINIMUM you should have (1+proto+dose|labs)
-random inter, proto, dose, that all "interact" with lab
-
-our final analysis should be on variation of intercepts and slopes
-how we summarize it is up to us
-Jonathan suggests looking at joint dist of (dose,lab) then 
-then sample a bunch of intercepts and slopes from dist
-then plotting them all together and making sure slopes aren't highly varying and criss-crossed
-(you don't have to do it this way, but this is Jonathan's way)
-
-also, correlations come from summary function?
--->
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan)
 ```
-
 
 ```{r, warning=FALSE}
 dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
@@ -225,17 +197,22 @@ summary(m1.full)
 anova(m1.reduced, m1.full)
 ```
 
-In our previous random intercept model, we account for baseline differences between labs, but we also assume that the effects of the categorical variable proto is the same for each lab. This is not a valid assumption to make, so we introduce a random slope model. Now, proto has a random slope. 
+In our previous random intercept model, we account for baseline differences between labs, but we also assume that the effects of doses is the same for each lab. After plotting the log(blot) versus dose by lab, we see that this is not a valid assumption to make since the lines are clearly not parallel. So we introduce a random slope model. Now, dose1 and dose2 can have varying slopes. 
 
-In this random slope model, we see that the fit is comparable to that of the random intercept model. However, we also see that the variability due to sources other than the random effects (lab, protocol) is 0.189 (decreased from 0.192). 
+In this random slope model, we see that the variability due to sources other than the random effects is 0.190 (decreased from 0.192). 
 
 ```{r}
-# RANDOM SLOPE MODEL
-m2 <- lmer(log(blot) ~ dose1 + dose2 + (proto + 1|lab), data=dat, REML=FALSE)
-summary(m2)
+ggplot(data=dat,aes(x=dose1,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 1", y="log(blot)", title="Dose 1 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
+ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 1", y="log(blot)", title="Dose 1 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
 
+# RANDOM SLOPE MODEL
+m2 <- lmer(log(blot) ~ proto + (dose1 + dose2 + 1|lab), data=dat, REML=FALSE)
+summary(m2)
 ```
 
+# TODO: plot lmer results
+if you plot the line for each lab and they look similar, the dose response is probably reliable 
+if there's a ton of variance, it's probably not reliable because there's a lot of variability between labs 
 
 #### Fourth Approach: Bayesian Hierarchical Model
 $$
@@ -304,40 +281,6 @@ schools <- stan(model_code = stanstring,
 )
 ```
 
-# Messy RSTAN code
-```{r}
-dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
-dat <- dat[!(is.na(dat$blot) | is.na(dat$body) | is.na(dat$wet)),]
-dat_list = as.list(dat)
-dat_list$N = length(dat$blot)
-dat_list$dose12 = dat_list$dose1 * dat_list$dose2
-
-stan_model2 = strwrap("
-data {
-  int<lower=0> N;
-  vector[N] dose1;
-  vector[N] dose2;
-  vector[N] dose12;
-  vector[N] blot;
-}
-parameters {
-  real alpha;
-  real beta1;
-  real beta2;
-  real beta3;
-  real<lower=0> sigma2;
-}
-model {
-  beta1;
-  beta2;
-  beta3;
-  sigma2;
-  blot ~ normal(alpha + beta1 * dose1 + beta2 * dose2 + beta3 * dose12, sqrt(sigma2));
-}")
-
-fit <- stan(model_code=stan_model2, data = dat_list, 
-            iter = 200, chains = 1, control = list(max_treedepth = 15))
-```
 ### Contributions
 
 Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. 
@@ -352,3 +295,30 @@ for(name in lab_names[-1]){
 }
 
 ```
+
+
+<!--         THESE ARE NOT MERGE CONFLICTS
+
+we are interested in estimating dose response curve!
+therefore we want to treat dose as a continuous variable.
+does response curve vary across labs? estimate the variation between labs.
+
+group i in different lab should not be treated as the same group.
+do not use group! it provides no new information.
+
+2 recommended approaches to analyze data are as:
+  freq mixed effects (lme4::lmer)
+  bayesian hierarchical (rstan, rjags)
+  
+AT MINIMUM you should have (1+proto+dose|labs)
+random inter, proto, dose, that all "interact" with lab
+
+our final analysis should be on variation of intercepts and slopes
+how we summarize it is up to us
+Jonathan suggests looking at joint dist of (dose,lab) then 
+then sample a bunch of intercepts and slopes from dist
+then plotting them all together and making sure slopes aren't highly varying and criss-crossed
+(you don't have to do it this way, but this is Jonathan's way)
+
+also, correlations come from summary function?
+-->
