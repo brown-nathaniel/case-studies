@@ -1,3 +1,4 @@
+
 ---
 title: "Case 1"
 author: "Nathaniel Brown, Annie Tang, William Yang"
@@ -235,7 +236,9 @@ ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line()
 m2 <- lmer(log(blot) ~ proto + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
 m3 <- lmer(log(blot) ~ proto + (I(1/(dose1+0.5)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 #m3 is a much better fit FYI. normal qq is actually a straight line!
-summary(m2)
+m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+0.5)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+# anova to show addition of log(body) is significant 
+nova <- anova(m3, m4)
 ```
 
 The diagnostic plots for this model are similar to those for the previous model with fixed intercepts.
@@ -285,6 +288,27 @@ The models are similar in their predictive accuracy, although Fixed Dose has a m
 # TODO: plot lmer results
 if you plot the line for each lab and they look similar, the dose response is probably reliable 
 if there's a ton of variance, it's probably not reliable because there's a lot of variability between labs 
+
+```{r}
+#simulate lmer random effects
+sim_params <- function(mod, nsim = 1000){
+  
+  fixeffmeans <- summod[["fixef"]]
+  randeffmeans_all <- getME(mod, "theta")
+  numdots <- sapply(names(randeffmeans_all), gregexpr, pattern="." , fixed=TRUE) %>% sapply(length)
+  randeffmeans <- randeffmeans_all[which((numdots) == 1)]
+  randeffsd <- diag(summary(mod)[["varcor"]][["lab"]])
+  
+  sims <- array(NA, c(nsim, length(randeffsd)))
+  for(i in 1:ncol(sims)){
+    sims[,i] <- rnorm(nrow(sims), mean = randeffmeans[i], sd = randeffsd[i])
+  }
+  
+  plot(x=c(-10,10), y=c(-10,10), type="n") #abline(intercept, slope)
+  for(j in 1:nrow(sims))
+  abline(sims[j,1], sims[j,2], col="gray")
+}
+```
 
 <!--
 #### Fourth Approach: Bayesian Hierarchical Model
@@ -347,75 +371,11 @@ datalist <- list(
   sigma = c(15, 10, 1, 11, 9, 11, 10, 18)
 )
 datalist$J = length(datalist[["y"]])
-schools <- stan(model_code = stanstring, 
-                data = datalist,
-                pars = c("theta", "mu", "tau"),
-                iter = 1000, chains = 1
-)
-```
-
-# Messy RSTAN code
-```{r}
-dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
-dat <- dat[!(is.na(dat$blot) | is.na(dat$body) | is.na(dat$wet)),]
-dat_list = as.list(dat)
-dat_list$N = 2666
-dat_list$dose12 = dat_list$dose1 * dat_list$dose2
-dummy_labs = model.matrix(~ lab, data = dat)
-dat_list$dummy_lab = dummy_labs
-dat_list$L = ncol(dummy_labs)
-dummy_protocols = model.matrix(~ proto, data = dat)
-dat_list$dummy_proto = dummy_protocols
-dat_list$P = ncol(dummy_protocols)
-
-
-stan_model3 = strwrap("
-  data {
-    int<lower=1> N;
-    real dose1[N];
-    real dose2[N];
-    real blot[N];
-    int<lower=1> L; // number of labs
-  }
-  parameters {
-    vector[L] lab_intercepts;
-    vector[L] lab_slopes;
-    real<lower=0> sigma;
-    real<lower=0> sigma_l;
-  }
-  model {
-    real mu;
-    // priors
-    lab_intercepts ~ normal(0, 100);
-    lab_slopes ~ normal(0, 100);
-    for (i in 1:N) {
-      mu = 
-    }
-  }
-")
-
-
-stan_model2 = strwrap("
-data {
-  int<lower=0> N;
-  vector[N] dose1;
-  vector[N] dose2;
-  vector[N] dose12;
-  vector[N] blot;
-}
-parameters {
-  real alpha;
-  real beta1;
-  real beta2;
-  real beta3;
-  real<lower=0> sigma;
-}
-model {
-  blot ~ normal(alpha + beta1 * dose1 + beta2 * dose2 + beta3 * dose12, sigma);
-}")
-
-fit <- stan(model_code=stan_model2, data = dat_list, 
-            iter = 200, chains = 2)
+# schools <- stan(model_code = stanstring, 
+#                 data = datalist,
+#                 pars = c("theta", "mu", "tau"),
+#                 iter = 1000, chains = 1
+#)
 ```
 
 -->
