@@ -5,28 +5,20 @@ date: "September 6, 2017"
 output: html_document
 ---
 
-<!--
-we are interested in estimating dose response curve!
-therefore we want to treat dose as a continuous variable.
-does response curve vary across labs? estimate the variation between labs.
-
-group i in different lab should not be treated as the same group.
-do not use group! it provides no new information.
-
-2 recommended approaches to analyze data are as:
-  freq mixed effects (lme4::lmer)
-  bayesian hierarchical (rstan, rjags)
--->
-
 ```{r setup, include=FALSE}
+set.seed(440)
 knitr::opts_chunk$set(echo = TRUE)
-library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan)
+library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan); library(lme4)
 ```
-
 
 ```{r, warning=FALSE}
 dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
 dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
+ndat <- nrow(dat)
+trainrows <- sample(x=1:ndat, size = ceiling(0.75*ndat))
+testrows <- setdiff(1:ndat, trainrows)
+dat_train <- dat[trainrows,]
+dat_test <- dat[testrows,]
 ```
 
 Initially, we plotted the blotted weights by body weights, and we noticed that the body weights seemed to be separated into two groups.
@@ -122,10 +114,10 @@ $$
 log(y) \sim \text{Norm}(\mu , \sigma^2)
 $$
 
-```{r fig.width=15, fig.height=5}
+```{r fig.width=15, fig.height=5, echo=FALSE}
 mod1 <- lm(log(blot) ~ 1, data = dat)
 resid_title <- "Residuals vs. Fitted Values"
-qq_title <- "Normal Quantile-Quantile"
+qq_title <- "Normal Quantile-Quantile Plot"
 hist_title <- "Histogram of Residuals"
 par(mfrow=c(1,3))
 logmeans <- data.frame(blot = log(dat$blot), lmean =mean(log(dat$blot)) )
@@ -157,7 +149,7 @@ mod2 <- lm(log(mu_hat) ~ 1)
 ```
 
 We provide the diagnosis plots for the first lab, `Basf`, and we put the others in Appendix 1.1, since R does not support plotting for multivariate regression models.
-```{r fig.width=15, fig.height=5}
+```{r fig.width=15, fig.height=5, echo=FALSE}
 plot_mvn <- function(mod = NA, lab_name = NA){
   lab_ind <- which(lab_names == lab_name)
   newdat <- dat %>% filter(lab == lab_name) %>% select(blot) %>% log()
@@ -175,7 +167,7 @@ par(mfrow=c(1,1))
 
 The diagnostic plots for this model indicate that the model predicts the same fitted value for each input, and that the residual quantiles do not follow a normal distribution. For the first lab, the histogram of residuals is not bimodal like they are in the simpler $mod1$, but it does show left skew. These same problems, in addition to  multimodality of the residuals, are present for the diagnostic plots for the remaining labs in the Appendix. 
 
-A weakness of this model is that, as you add more structure (blocking factors, covariates for dosage, etc.) to the model, the covariance matrix becomes more complicated, and maximum likelihood estimation becomes unwieldy. Also, this model estimates parameters only for these $n$ groups, and does not apply to new groups without recalculation.
+A weakness of this model is that, as you add more structure (blocking factors, covariates for dosage, etc.) to the model, the covariance matrix becomes more complicated, and maximum likelihood estimation becomes unwieldy. The poor fit of this model indicates that we should control for more than just the lab effect, so we consider a mixed effects model.
 
 
 #### Third Approach: Mixed Effects
@@ -195,32 +187,104 @@ Let $y_i$ be a $n_i \times 1$ vector of observations, where $i$ indicates the la
 We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a population distribution characterizing lab-to-lab variability. This allows our model to be generalizable to future labs. Furthermore, when calculating the MLE of each $\mu_i$, there is less variability because they are pulled in toward the grand mean $\mu$. This introduces bias, but the decrease in varaiance results in an overall benefit for the MSE.
 
 ##### Analysis
+```{r}
+plot_lmer <- function(mod){
+  par(mfrow=c(1,3))
+  fitvals <- exp(predict(mod, dat_train))
+  resids <- summary(mod)[["residuals"]]
 
-In our analysis, we choose to add a random effect for the lab variable, in order to account for lab-to-lab heterogeneity. Essentially, this allows us to avoid violating an independence assumption by assuming a different baseline response for each lab. First, we model these differences between individual labs by assuming random intercepts for each lab. We first include only dose1 and dose2 as fixed effects, then introduce proto as a fixed effect after confirming (through anova; p<2.2e-16, chi2=2216.3) that it is a significant predictor.
+  plot(fitvals, resids, main = resid_title, xlab = "Fitted Values", ylab = "Residuals"); abline(h=0)
+  qqnorm(resids, main = qq_title)
+  hist(resids, main = hist_title, xlab="Residuals", col = "gray")
+  par(mfrow=c(1,1))
+}
+```
 
-
-With this full model, we see that the variability due to lab is 0.030 (in terms of variance), and variability due to non-lab sources is 0.192. And when we take a look at the fixed effects, we see that an increase in the amount of dose1 corresponds to an increase (0.143 units) in the response variable, log(blot). Furthermore, an increase in the amount of dose2 corresponds to a decrease (-0.508 units) in the response variable. Protocols B, C, and D all lead to an increase in the response variable, relative to protocol A. 
 
 ```{r}
-library(lme4)
 # RANDOM INTERCEPT MODEL
-m1.reduced <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat, REML = FALSE)
+m1.reduced <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat_train, REML = FALSE)
 summary(m1.reduced) 
-m1.full <- lmer(log(blot) ~ dose1 + dose2 + proto + (1|lab), data=dat, REML = FALSE)
+m1.full <- lmer(log(blot) ~ dose1 + dose2 + proto + (1|lab), data=dat_train, REML = FALSE)
 summary(m1.full)
-anova(m1.reduced, m1.full)
+nova <- anova(m1.reduced, m1.full)
 ```
 
-In our previous random intercept model, we account for baseline differences between labs, but we also assume that the effects of the categorical variable proto is the same for each lab. This is not a valid assumption to make, so we introduce a random slope model. Now, proto has a random slope. 
+In our analysis, we choose to add a random effect for the lab variable, in order to account for lab-to-lab heterogeneity. Essentially, this allows us to avoid violating an independence assumption by assuming a different baseline response for each lab. First, we model these differences between individual labs by assuming random intercepts for each lab. We first include only dose1 and dose2 as fixed effects, then introduce proto as a fixed effect after confirming through anova ($p$ < 2.2e-16, $\chi^2$=`r nova[["Chisq"]]`) that it is a significant predictor.
 
-In this random slope model, we see that the fit is comparable to that of the random intercept model. However, we also see that the variability due to sources other than the random effects (lab, protocol) is 0.189 (decreased from 0.192). 
+
+With this full model, we see that the variability due to lab is 0.030 (in terms of variance), and variability due to non-lab sources is 0.192. And when we take a look at the fixed effects, we see that an increase in the amount of dose1 corresponds to an increase (0.143 units) in the response variable, log(blot). Furthermore, an increase in the amount of dose2 corresponds to a decrease (-0.508 units) in the response variable. Protocols B, C, and D all lead to an increase in the response variable, relative to protocol A. The diagnostic plots below show that this model fits better than the previous two. Although the residual variance decreases as the fitted values increase, the quantiles of the residuals are approximately normal.
+
+```{r fig.width=15, fig.height=5, echo=FALSE}
+
+par(mfrow = c(1,3))
+plot_lmer(m1.full)
+par(mfrow = c(1,1))
+```
+
+
+In our previous random intercept model, we account for baseline differences between labs, but we also assume that the effects of doses is the same for each lab. After plotting the log(blot) versus dose by lab, we see that this is not a valid assumption to make since the lines are clearly not parallel. So we introduce a random slope model. Now, dose1 and dose2 can have varying slopes. 
+
+In this random slope model, we see that the variability due to sources other than the random effects is 0.190 (decreased from 0.192). 
 
 ```{r}
-# RANDOM SLOPE MODEL
-m2 <- lmer(log(blot) ~ dose1 + dose2 + (proto + 1|lab), data=dat, REML=FALSE)
-summary(m2)
+ggplot(data=dat,aes(x=dose1,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 1", y="log(blot)", title="Dose 1 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
+ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 2", y="log(blot)", title="Dose 2 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
 
+# RANDOM SLOPE MODEL
+m2 <- lmer(log(blot) ~ proto + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m3 <- lmer(log(blot) ~ proto + (I(1/(dose1+0.5)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+#m3 is a much better fit FYI. normal qq is actually a straight line!
+summary(m2)
 ```
+
+The diagnostic plots for this model are similar to those for the previous model with fixed intercepts.
+
+```{r fig.width=15, fig.height=5, echo = FALSE}
+par(mfrow = c(1,3))
+plot_lmer(m2)
+par(mfrow = c(1,1))
+```
+
+We also evaluate the mixed models by how well they can predict data that they were not trained on. Using a hold-out sample of 25% of the data set, we calculated the results for Root Mean Squared Error ($\text{RMSE} = \sqrt{E[(y - \hat{y})^2]}$) and Mean Absolute Error ($\text{MAE} = E[|y - \hat{y}|]$). Root Mean Squared Error penalizes more for extreme error, while Mean Absolute Error simply averages all of the errors. The results are in the table below:
+
+```{r prediction, echo=FALSE}
+
+#root mean squared error penalizes more for extreme error
+rms_err <- function(actual, predicted){
+  error <- actual - predicted
+  return(sqrt(mean((error)^2)))
+}
+ 
+#absolute error weighs all error equally
+abs_err <- function(actual, predicted){
+  error <- actual - predicted
+  mean(abs(error))
+}
+ 
+compute_errs <- function(mod, test = dat_test){
+  preds <- exp(predict(mod, test))
+  absolute <- abs_err(test$blot, preds)
+  rootmean <- rms_err(test$blot, preds)
+  return(list(abs_err = absolute, rms_err = rootmean))
+}
+
+random_dose_errs <- compute_errs(m2)
+fixed_dose_errs <- compute_errs(m1.full)
+
+tab <- t(data.frame(x=as.numeric(random_dose_errs),y=as.numeric(fixed_dose_errs)))
+colnames(tab) <- c("MAE","RMSE")
+rownames(tab) <- c("Random Dose", "Fixed Dose")
+kable(tab)
+```
+
+The models are similar in their predictive accuracy, although Fixed Dose has a marginally better RMSE and MAE for this testing data set. 
+
+# sorry annie some of your variance numbers and stuff changed since I split the data up into a training and a testing set.
+
+# TODO: plot lmer results
+if you plot the line for each lab and they look similar, the dose response is probably reliable 
+if there's a ton of variance, it's probably not reliable because there's a lot of variability between labs 
 
 #### Fourth Approach: Bayesian Hierarchical Model
 $$
@@ -359,10 +423,36 @@ Nathaniel Brown made the visualizations for this report. He also organized the r
 ### Appendix
 
 #### 1.1 Multivariate Normal Diagnosis Plots
-```{r fig.height=5, fig.width=15, include = FALSE}
+```{r fig.height=5, fig.width=15, echo = FALSE}
 par(mfrow = c(1,3))
 for(name in lab_names[-1]){
   plot_mvn(mod2, name)
 }
-
 ```
+
+
+<!--         THESE ARE NOT MERGE CONFLICTS
+
+we are interested in estimating dose response curve!
+therefore we want to treat dose as a continuous variable.
+does response curve vary across labs? estimate the variation between labs.
+
+group i in different lab should not be treated as the same group.
+do not use group! it provides no new information.
+
+2 recommended approaches to analyze data are as:
+  freq mixed effects (lme4::lmer)
+  bayesian hierarchical (rstan, rjags)
+  
+AT MINIMUM you should have (1+proto+dose|labs)
+random inter, proto, dose, that all "interact" with lab
+
+our final analysis should be on variation of intercepts and slopes
+how we summarize it is up to us
+Jonathan suggests looking at joint dist of (dose,lab) then 
+then sample a bunch of intercepts and slopes from dist
+then plotting them all together and making sure slopes aren't highly varying and criss-crossed
+(you don't have to do it this way, but this is Jonathan's way)
+
+also, correlations come from summary function?
+-->
