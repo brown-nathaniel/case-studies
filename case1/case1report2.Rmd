@@ -154,7 +154,7 @@ hist(mod1$residuals, breaks=25, main = hist_title, col="gray", xlab="")
 par(mfrow=c(1,1))
 ```
 
-This naive approach assumes the blotted weight follows a normal distribution with a mean centered around the mean of the log blotted weight (`r mean(log(dat$blot))`) constant variance. The diagnostic plots below show that the same value is predicted for each input, the quantiles of the data do not follow a normal distrbution, and that the residuals are bimodal. We believe bimodality may be caused by the separation of rats into children and adult protocols.
+This naive approach assumes the blotted weight follows a normal distribution with a mean centered around the mean of the log blotted weight (`r round(mean(log(dat$blot)),4)`) and constant variance. The diagnostic plots below show that the same value is predicted for each input, the quantiles of the residuals do not follow a normal distrbution, and that the residuals are bimodal. We believe bimodality may be caused by the separation of rats into juvenille and adult protocols.
 
 #### Second Approach: Multivariate Normal
 $$
@@ -192,7 +192,7 @@ plot_mvn(mod2, "Basf")
 par(mfrow=c(1,1))
 ```
 
-The diagnostic plots for this model indicate that the model predicts the same fitted value for each input, and that the residual quantiles do not follow a normal distribution. For the first lab, the histogram of residuals is not bimodal like they are in the simpler $mod1$, but it does show left skew. These same problems, in addition to  multimodality of the residuals, are present for the diagnostic plots for the remaining labs in the Appendix. 
+The diagnostic plots for this model indicate that the model predicts the same fitted value for each lab, and that the residual quantiles do not follow a normal distribution. For the `Basf` lab, the histogram of residuals shows left skew. These same problems, along with multimodality of the residuals, are present for the diagnostic plots for the remaining labs in the Appendix. 
 
 A weakness of this model is that, as you add more structure (blocking factors, covariates for dosage, etc.) to the model, the covariance matrix becomes more complicated, and maximum likelihood estimation becomes unwieldy. The poor fit of this model indicates that we should control for more than just the lab effect, so we consider a mixed effects model.
 
@@ -200,18 +200,16 @@ A weakness of this model is that, as you add more structure (blocking factors, c
 #### Third Approach: Mixed Effects
 
 $$
-y_i \in M_{n_i \times 1}( \Re)
+y_{ij} \sim \beta_{0,i} + \beta_{1,i}x_{ij,d_1} + \beta_{2,i}x_{ij,d_2} + \beta_{3,i}x_{ij,p_B} + \beta_{4,i}x_{ij,p_C} + \beta_{5,i}x_{ij,p_D} + \beta_{6,i}x_{ij,log(w)} + \epsilon
 \\
-\mu_i \sim \text{Norm}(\mu, \psi^2)
+\beta_{0:6,i} \sim N(\mu_{0:6,i}, \sigma^2_{0:6,i})
 \\
-\sigma_i^2 \sim \text{IG}(\nu/2, \nu\sigma^2/2)
-\\
-y_{ij} \sim \text{Norm}(\mu_i, \sigma^2_i)
+\epsilon \sim N(\mu, \sigma^2)
 $$
 
-Let $y_i$ be a $n_i \times 1$ vector of observations, where $i$ indicates the lab and $n_i$ is equal to the number of observations within lab $i$. So, $y_{ij}$ represents an individual observation for subject $j$ within lab $i$. We apply a Gaussian assumption here and say that each observation is normally distributed for some $\mu_i$ and $\sigma^2_i$. 
+Let $y_{ij}$ be the observation for log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose1 and dose2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables for which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for lab-to-lab variability in the intercepts and slopes on the blotted weight for the different dosages and protocols.
 
-We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a population distribution characterizing lab-to-lab variability. This allows our model to be generalizable to future labs. Furthermore, when calculating the MLE of each $\mu_i$, there is less variability because they are pulled in toward the grand mean $\mu$. This introduces bias, but the decrease in varaiance results in an overall benefit for the MSE.
+We start at a reduced form of this model and augment it to its full form after initial analyses.
 
 ##### Analysis
 ```{r, echo=FALSE}
@@ -235,7 +233,7 @@ m1.full <- lmer(log(blot) ~ dose1 + dose2 + proto + (1|lab), data=dat_train, REM
 nova <- anova(m1.reduced, m1.full)
 ```
 
-In our analysis, we choose to add a random effect for the lab variable, in order to account for lab-to-lab heterogeneity. Essentially, this allows us to avoid violating an independence assumption by assuming a different baseline response for each lab. First, we model these differences between individual labs by assuming random intercepts for each lab. We first include only dose1 and dose2 as fixed effects, then introduce proto as a fixed effect after confirming through anova ($p$ < 2.2e-16, $\chi^2$=`r round(nova[["Chisq"]], 4)`) that it is a significant predictor.
+In our analysis, we choose to add a random effect for the lab variable, in order to account for lab-to-lab heterogeneity. Essentially, this allows us to avoid violating an independence assumption by assuming a different baseline response for each lab. First, we model these differences between individual labs by assuming random intercepts for each lab. We first include only dose1 and dose2 as fixed effects, then introduce proto as a fixed effect after confirming through anova ($p$ < 2.2e-16, $\chi^2$=`r round(nova[["Chisq"]][length(nova[["Chisq"]])], 4)`) that it is a significant predictor. The summary statistics of this model are shows in the table below:
 
 ```{r, echo = FALSE}
 lmer_list <- function(mod){
@@ -281,7 +279,7 @@ par(mfrow = c(1,1))
 ```
 
 
-In our previous random intercept model, we account for baseline differences between labs, but we also assume that the effects of doses is the same for each lab. After plotting the log(blot) versus dose by lab, we see that this is not a valid assumption to make since the lines are clearly not parallel. So we introduce a random slope model. Now, dose1 and dose2 can have varying slopes.
+In this random intercept model, we account for baseline differences between labs, but we also assume that the effects of doses is the same for each lab. After plotting the log(blot) versus dose by lab, we see that this is not a valid assumption to make since the lines are clearly not parallel. So we introduce a random slope model. Now, dose1 and dose2 can have varying slopes.
 
 
 ```{r, echo=FALSE}
@@ -298,7 +296,7 @@ m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), d
 nova <- anova(m3, m4)
 ```
 
-After adding the random slopes, we transformed dose 1 using a reciprocal transformation and added body weight as a predictor in order to have the best fitting model. We evaluate this model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy, which we evaluate using Mean Absolute Error ($\text{MAE} = E[|y - \hat{y}|]$) and Root Mean Squared Error ($\text{RMSE} = \sqrt{E[(y - \hat{y})^2]}$). Root Mean Squared Error penalizes more for extreme error, while Mean Absolute Error simply averages all of the errors.
+After adding the random slopes, we transformed dose 1 using a reciprocal transformation and added body weight as a predictor in order to have the best fitting model. We evaluate this model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy, which we evaluate using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors.
 
 
 ```{r, fig.height=5, fig.width=15, echo=FALSE}
