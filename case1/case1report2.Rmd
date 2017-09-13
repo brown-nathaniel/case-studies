@@ -204,7 +204,7 @@ y_{ij} \sim \beta_{0,i} + \beta_{1,i}x_{ij,d_1} + \beta_{2,i}x_{ij,d_2} + \beta_
 \\
 \beta_{0:6,i} \sim N(\mu_{0:6,i}, \sigma^2_{0:6,i})
 \\
-\epsilon \sim N(\mu, \sigma^2)
+\epsilon \sim N(0, \sigma^2)
 $$
 
 Let $y_{ij}$ be the observation for log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose1 and dose2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables for which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for lab-to-lab variability in the intercepts and slopes on the blotted weight for the different dosages and protocols.
@@ -252,11 +252,11 @@ lmer_list <- function(mod){
 
   names(randeffmeans) <- rnamz
 
-  fixefftab <- data.frame(fixeffmeans,fixeffsd^2)
+  fixefftab <- data.frame(fixeffmeans,fixeffsd^2) %>% round(4)
   names(fixefftab) <- c("Mean Fixed Effects", "Variance Fixed Effects")
-  randefftab <- data.frame(randeffmeans,randeffvar)
+  randefftab <- data.frame(randeffmeans,randeffvar) %>% round(4)
   names(randefftab) <- c("Mean Random Effects", "Variance Random Effects")
-  residtab <- data.frame(residsd^2)
+  residtab <- data.frame(residsd^2) %>% round(4)
   names(residtab) <- c("Variance")
   rownames(residtab) <- c("Residual")
   
@@ -319,8 +319,8 @@ abs_err <- function(actual, predicted){
  
 compute_errs <- function(mod, test = dat_test){
   preds <- exp(predict(mod, test))
-  absolute <- abs_err(test$blot, preds)
-  rootmean <- rms_err(test$blot, preds)
+  absolute <- abs_err(test$blot, preds) %>% round(4)
+  rootmean <- rms_err(test$blot, preds) %>% round(4)
   return(list(abs_err = absolute, rms_err = rootmean))
 }
 
@@ -339,11 +339,11 @@ We see that the variability due to sources other than the random effects is 0.07
 #simulate lmer random effects
 sim_params <- function(mod, nsim = 1000){
   
-  fixeffmeans <- summod[["fixef"]]
-  randeffmeans_all <- getME(mod, "theta")
+  fixeffmeans <- summod[["fixef"]] %>% round(4)
+  randeffmeans_all <- getME(mod, "theta") %>% round(4)
   numdots <- sapply(names(randeffmeans_all), gregexpr, pattern="." , fixed=TRUE) %>% sapply(length)
   randeffmeans <- randeffmeans_all[which((numdots) == 1)]
-  randeffsd <- diag(summary(mod)[["varcor"]][["lab"]])
+  randeffsd <- diag(summary(mod)[["varcor"]][["lab"]]) %>% round(4)
   
   sims <- array(NA, c(nsim, length(randeffsd)))
   for(i in 1:ncol(sims)){
