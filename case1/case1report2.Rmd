@@ -117,7 +117,7 @@ $$
 ```{r fig.width=15, fig.height=5, echo=FALSE}
 mod1 <- lm(log(blot) ~ 1, data = dat)
 resid_title <- "Residuals vs. Fitted Values"
-qq_title <- "Normal Quantile-Quantile"
+qq_title <- "Normal Quantile-Quantile Plot"
 hist_title <- "Histogram of Residuals"
 par(mfrow=c(1,3))
 logmeans <- data.frame(blot = log(dat$blot), lmean =mean(log(dat$blot)) )
@@ -167,7 +167,7 @@ par(mfrow=c(1,1))
 
 The diagnostic plots for this model indicate that the model predicts the same fitted value for each input, and that the residual quantiles do not follow a normal distribution. For the first lab, the histogram of residuals is not bimodal like they are in the simpler $mod1$, but it does show left skew. These same problems, in addition to  multimodality of the residuals, are present for the diagnostic plots for the remaining labs in the Appendix. 
 
-A weakness of this model is that, as you add more structure (blocking factors, covariates for dosage, etc.) to the model, the covariance matrix becomes more complicated, and maximum likelihood estimation becomes unwieldy. Also, this model estimates parameters only for these $n$ groups, and does not apply to new groups without recalculation.
+A weakness of this model is that, as you add more structure (blocking factors, covariates for dosage, etc.) to the model, the covariance matrix becomes more complicated, and maximum likelihood estimation becomes unwieldy. The poor fit of this model indicates that we should control for more than just the lab effect, so we consider a mixed effects model.
 
 
 #### Third Approach: Mixed Effects
@@ -188,15 +188,15 @@ We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a
 
 ##### Analysis
 ```{r}
-#These plots need to be cleaned up but here are the basics
 plot_lmer <- function(mod){
-  
+  par(mfrow=c(1,3))
   fitvals <- exp(predict(mod, dat_train))
   resids <- summary(mod)[["residuals"]]
 
-  plot(fitvals, resids)
-  qqnorm(resids)
-  hist(resids)
+  plot(fitvals, resids, main = resid_title, xlab = "Fitted Values", ylab = "Residuals"); abline(h=0)
+  qqnorm(resids, main = qq_title)
+  hist(resids, main = hist_title, xlab="Residuals", col = "gray")
+  par(mfrow=c(1,1))
 }
 ```
 
@@ -233,6 +233,8 @@ ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line()
 
 # RANDOM SLOPE MODEL
 m2 <- lmer(log(blot) ~ proto + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m3 <- lmer(log(blot) ~ proto + (I(1/(dose1+0.5)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+#m3 is a much better fit FYI. normal qq is actually a straight line!
 summary(m2)
 ```
 
@@ -260,22 +262,25 @@ abs_err <- function(actual, predicted){
   mean(abs(error))
 }
  
-compute_errs <- function(mod, test){
+compute_errs <- function(mod, test = dat_test){
   preds <- exp(predict(mod, test))
   absolute <- abs_err(test$blot, preds)
   rootmean <- rms_err(test$blot, preds)
   return(list(abs_err = absolute, rms_err = rootmean))
 }
 
-random_dose_errs <- compute_errs(m2, dat_test)
-fixed_dose_errs <- compute_errs(m1.full, dat_test)
+random_dose_errs <- compute_errs(m2)
+fixed_dose_errs <- compute_errs(m1.full)
 
 tab <- t(data.frame(x=as.numeric(random_dose_errs),y=as.numeric(fixed_dose_errs)))
 colnames(tab) <- c("MAE","RMSE")
 rownames(tab) <- c("Random Dose", "Fixed Dose")
 kable(tab)
 ```
+
 The models are similar in their predictive accuracy, although Fixed Dose has a marginally better RMSE and MAE for this testing data set. 
+
+# sorry annie some of your variance numbers and stuff changed since I split the data up into a training and a testing set.
 
 # TODO: plot lmer results
 if you plot the line for each lab and they look similar, the dose response is probably reliable 
@@ -359,7 +364,6 @@ par(mfrow = c(1,3))
 for(name in lab_names[-1]){
   plot_mvn(mod2, name)
 }
-
 ```
 
 
