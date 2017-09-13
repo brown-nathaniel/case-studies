@@ -97,6 +97,31 @@ ggplot(data = protoweights_long,
 
 Upon plotting all combinations of dosages across groups (each group represents a different combination of dose 1 and dose 2), we notice a couple of trends. First, we see that as the quantity of dose 1 increases without dose 2, the log blotted weight increases. Secondly, when dose 2 is introduced, an increase in quantity of dose 2 leads to a decrease in log blotted weight.
 
+```{r, warning=FALSE, echo=FALSE}
+dosage_groups <-  dat %>% 
+                  group_by(group) %>% 
+                  summarize(dose1 = unique(dose1), 
+                            dose2 = unique(dose2),
+                            A = sum(proto == "A"),
+                            B = sum(proto == "B"),
+                            C = sum(proto == "C"),
+                            D = sum(proto == "D")
+                  ) %>% as.data.frame()
+doselabels <- apply(dosage_groups[,c("dose1", "dose2")], 1, paste, collapse = ", ") %>% paste("(", ., ")", sep="")
+
+ggplot(data = dat ,
+       mapping=aes(x=as.factor(group), y=log(blot))) + 
+  geom_boxplot() + 
+  labs(title = "log(Blotted Weight) by Dosage",
+       x = "Combination of (Dose 1, Dose 2)",
+       y = "log(Blotted Weight)") +
+  scale_x_discrete(labels = doselabels) + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1),
+        plot.title = element_text(hjust = 0.5))
+kable(dosage_groups)
+
+```
+
 ### Initial Model-Fitting Results
 <!-- should contiain:
 
