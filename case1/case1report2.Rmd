@@ -286,6 +286,27 @@ The models are similar in their predictive accuracy, although Fixed Dose has a m
 if you plot the line for each lab and they look similar, the dose response is probably reliable 
 if there's a ton of variance, it's probably not reliable because there's a lot of variability between labs 
 
+```{r}
+#simulate lmer random effects
+sim_params <- function(mod, nsim = 1000){
+  
+  fixeffmeans <- summod[["fixef"]]
+  randeffmeans_all <- getME(mod, "theta")
+  numdots <- sapply(names(randeffmeans_all), gregexpr, pattern="." , fixed=TRUE) %>% sapply(length)
+  randeffmeans <- randeffmeans_all[which((numdots) == 1)]
+  randeffsd <- diag(summary(mod)[["varcor"]][["lab"]])
+  
+  sims <- array(NA, c(nsim, length(randeffsd)))
+  for(i in 1:ncol(sims)){
+    sims[,i] <- rnorm(nrow(sims), mean = randeffmeans[i], sd = randeffsd[i])
+  }
+  
+  plot(x=c(-10,10), y=c(-10,10), type="n") #abline(intercept, slope)
+  for(j in 1:nrow(sims))
+  abline(sims[j,1], sims[j,2], col="gray")
+}
+```
+
 <!--
 #### Fourth Approach: Bayesian Hierarchical Model
 $$
