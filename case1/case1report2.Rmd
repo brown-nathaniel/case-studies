@@ -1,7 +1,7 @@
 ---
 title: "Case 1"
 author: "Nathaniel Brown, Annie Tang, William Yang"
-date: "September 14, 2017"
+date: "September 13, 2017"
 output: html_document
 ---
 
@@ -231,9 +231,7 @@ plot_lmer <- function(mod){
 ```{r, echo=FALSE}
 # RANDOM INTERCEPT MODEL
 m1.reduced <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat_train, REML = FALSE)
-summary(m1.reduced) 
 m1.full <- lmer(log(blot) ~ dose1 + dose2 + proto + (1|lab), data=dat_train, REML = FALSE)
-summary(m1.full)
 nova <- anova(m1.reduced, m1.full)
 ```
 
@@ -339,11 +337,6 @@ kable(tab)
 
 We see that the variability due to sources other than the random effects is 0.0797 (decreased from 0.193). Also, the diagnostic plots improved, although it is notable that the residual variance decreases for larger fitted values. The fixed dose model is also much worse at predicting than the random dose model with transformations.
 
-
-# TODO: plot lmer results
-if you plot the line for each lab and they look similar, the dose response is probably reliable 
-if there's a ton of variance, it's probably not reliable because there's a lot of variability between labs 
-
 ```{r, echo=FALSE}
 #simulate lmer random effects
 sim_params <- function(mod, nsim = 1000){
@@ -440,6 +433,7 @@ Because the dose 1 effect has such a high variance relative to the mean, our mod
 
 ### Contributions
 
+Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. Nathanial implemented analysis for the univariate normal and multivariate normal approaches. Implementation and analysis of the mixed effects model was a joint effort by all members of the group. 
 
 ### Appendix
 
