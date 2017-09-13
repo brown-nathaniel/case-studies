@@ -296,6 +296,39 @@ dat <- dat[!(is.na(dat$blot) | is.na(dat$body) | is.na(dat$wet)),]
 dat_list = as.list(dat)
 dat_list$N = 2666
 dat_list$dose12 = dat_list$dose1 * dat_list$dose2
+dummy_labs = model.matrix(~ lab, data = dat)
+dat_list$dummy_lab = dummy_labs
+dat_list$L = ncol(dummy_labs)
+dummy_protocols = model.matrix(~ proto, data = dat)
+dat_list$dummy_proto = dummy_protocols
+dat_list$P = ncol(dummy_protocols)
+
+
+stan_model3 = strwrap("
+  data {
+    int<lower=1> N;
+    real dose1[N];
+    real dose2[N];
+    real blot[N];
+    int<lower=1> L; // number of labs
+  }
+  parameters {
+    vector[L] lab_intercepts;
+    vector[L] lab_slopes;
+    real<lower=0> sigma;
+    real<lower=0> sigma_l;
+  }
+  model {
+    real mu;
+    // priors
+    lab_intercepts ~ normal(0, 100);
+    lab_slopes ~ normal(0, 100);
+    for (i in 1:N) {
+      mu = 
+    }
+  }
+")
+
 
 stan_model2 = strwrap("
 data {
