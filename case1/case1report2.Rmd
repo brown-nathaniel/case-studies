@@ -122,6 +122,8 @@ kable(dosage_groups)
 
 ```
 
+
+
 ### Initial Model-Fitting Results
 <!-- should contiain:
 
@@ -238,7 +240,7 @@ nova <- anova(m1.reduced, m1.full)
 In our analysis, we choose to add a random effect for the lab variable, in order to account for lab-to-lab heterogeneity. Essentially, this allows us to avoid violating an independence assumption by assuming a different baseline response for each lab. First, we model these differences between individual labs by assuming random intercepts for each lab. We first include only dose1 and dose2 as fixed effects, then introduce proto as a fixed effect after confirming through anova ($p$ < 2.2e-16, $\chi^2$=`r nova[["Chisq"]]`) that it is a significant predictor.
 
 
-With this full model, we see that the variability due to lab is 0.028 (in terms of variance), and variability due to non-lab sources is 0.193. And when we take a look at the fixed effects, we see that an increase in the amount of dose1 corresponds to an increase (0.142 units) in the response variable, log(blot). Furthermore, an increase in the amount of dose2 corresponds to a decrease (-0.519 units) in the response variable. Protocols B, C, and D all lead to an increase in the response variable, relative to protocol A. The diagnostic plots below show that this model fits better than the previous two. Although the residual variance decreases as the fitted values increase, the quantiles of the residuals are approximately normal.
+With this full model, we see that the variability due to lab is 0.030 (in terms of variance), and variability due to non-lab sources is 0.192. And when we take a look at the fixed effects, we see that an increase in the amount of dose1 corresponds to an increase (0.143 units) in the response variable, log(blot). Furthermore, an increase in the amount of dose2 corresponds to a decrease (-0.508 units) in the response variable. Protocols B, C, and D all lead to an increase in the response variable, relative to protocol A. The diagnostic plots below show that this model fits better than the previous two. Although the residual variance decreases as the fitted values increase, the quantiles of the residuals are approximately normal.
 
 ```{r fig.width=15, fig.height=5, echo=FALSE}
 
@@ -250,7 +252,7 @@ par(mfrow = c(1,1))
 
 In our previous random intercept model, we account for baseline differences between labs, but we also assume that the effects of doses is the same for each lab. After plotting the log(blot) versus dose by lab, we see that this is not a valid assumption to make since the lines are clearly not parallel. So we introduce a random slope model. Now, dose1 and dose2 can have varying slopes. 
 
-In this random slope model (m4), we see that the variability due to sources other than the random effects is 0.079 (decreased from 0.192). 
+In this random slope model, we see that the variability due to sources other than the random effects is 0.190 (decreased from 0.192). 
 
 ```{r, echo=FALSE}
 ggplot(data=dat,aes(x=dose1,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 1", y="log(blot)", title="Dose 1 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
@@ -269,7 +271,7 @@ The diagnostic plots for this model are similar to those for the previous model 
 
 ```{r fig.width=15, fig.height=5, echo = FALSE}
 par(mfrow = c(1,3))
-plot_lmer(m4)
+plot_lmer(m2)
 par(mfrow = c(1,1))
 ```
 
@@ -307,10 +309,32 @@ kable(tab)
 
 The models are similar in their predictive accuracy, although Fixed Dose has a marginally better RMSE and MAE for this testing data set. 
 
+# sorry annie some of your variance numbers and stuff changed since I split the data up into a training and a testing set.
 
 # TODO: plot lmer results
 if you plot the line for each lab and they look similar, the dose response is probably reliable 
 if there's a ton of variance, it's probably not reliable because there's a lot of variability between labs 
+
+```{r}
+#simulate lmer random effects
+sim_params <- function(mod, nsim = 1000){
+  
+  fixeffmeans <- summod[["fixef"]]
+  randeffmeans_all <- getME(mod, "theta")
+  numdots <- sapply(names(randeffmeans_all), gregexpr, pattern="." , fixed=TRUE) %>% sapply(length)
+  randeffmeans <- randeffmeans_all[which((numdots) == 1)]
+  randeffsd <- diag(summary(mod)[["varcor"]][["lab"]])
+  
+  sims <- array(NA, c(nsim, length(randeffsd)))
+  for(i in 1:ncol(sims)){
+    sims[,i] <- rnorm(nrow(sims), mean = randeffmeans[i], sd = randeffsd[i])
+  }
+  
+  plot(x=c(-10,10), y=c(-10,10), type="n") #abline(intercept, slope)
+  for(j in 1:nrow(sims))
+  abline(sims[j,1], sims[j,2], col="gray")
+}
+```
 
 <!--
 #### Fourth Approach: Bayesian Hierarchical Model
