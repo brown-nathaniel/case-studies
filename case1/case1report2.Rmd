@@ -1,7 +1,7 @@
 ---
 title: "Case 1"
 author: "Nathaniel Brown, Annie Tang, William Yang"
-date: "September 6, 2017"
+date: "September 14, 2017"
 output: html_document
 ---
 
@@ -303,7 +303,7 @@ nova <- anova(m3, m4)
 After adding the random slopes, we transformed dose 1 using a reciprocal transformation and added body weight as a predictor in order to have the best fitting model. We evaluate this model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy, which we evaluate using Mean Absolute Error ($\text{MAE} = E[|y - \hat{y}|]$) and Root Mean Squared Error ($\text{RMSE} = \sqrt{E[(y - \hat{y})^2]}$). Root Mean Squared Error penalizes more for extreme error, while Mean Absolute Error simply averages all of the errors.
 
 
-```{r, echo=FALSE}
+```{r, fig.height=5, fig.width=15, echo=FALSE}
 L2 <- lmer_list(m4)
 kable(L2[[1]]); kable(L2[[2]]); kable(L2[[3]])
 
@@ -434,10 +434,12 @@ datalist$J = length(datalist[["y"]])
 ```
 
 -->
+### Conclusion
+
+Because the dose 1 effect has such a high variance relative to the mean, our model shows that the bioassay being studied does not measure a consistent response to dosage across labs.
 
 ### Contributions
 
-Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. 
 
 ### Appendix
 
@@ -452,6 +454,9 @@ for(name in lab_names[-1]){
 
 <!--         THESE ARE NOT MERGE CONFLICTS
 
+TODO:
+  make the ggplots smaller
+  
 we are interested in estimating dose response curve!
 therefore we want to treat dose as a continuous variable.
 does response curve vary across labs? estimate the variation between labs.
