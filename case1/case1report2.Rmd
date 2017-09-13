@@ -1,4 +1,3 @@
-
 ---
 title: "Case 1"
 author: "Nathaniel Brown, Annie Tang, William Yang"
@@ -98,6 +97,33 @@ ggplot(data = protoweights_long,
 
 Upon plotting all combinations of dosages across groups (each group represents a different combination of dose 1 and dose 2), we notice a couple of trends. First, we see that as the quantity of dose 1 increases without dose 2, the log blotted weight increases. Secondly, when dose 2 is introduced, an increase in quantity of dose 2 leads to a decrease in log blotted weight.
 
+```{r, warning=FALSE, echo=FALSE}
+dosage_groups <-  dat %>% 
+                  group_by(group) %>% 
+                  summarize(dose1 = unique(dose1), 
+                            dose2 = unique(dose2),
+                            A = sum(proto == "A"),
+                            B = sum(proto == "B"),
+                            C = sum(proto == "C"),
+                            D = sum(proto == "D")
+                  ) %>% as.data.frame()
+doselabels <- apply(dosage_groups[,c("dose1", "dose2")], 1, paste, collapse = ", ") %>% paste("(", ., ")", sep="")
+
+ggplot(data = dat ,
+       mapping=aes(x=as.factor(group), y=log(blot))) + 
+  geom_boxplot() + 
+  labs(title = "log(Blotted Weight) by Dosage",
+       x = "Combination of (Dose 1, Dose 2)",
+       y = "log(Blotted Weight)") +
+  scale_x_discrete(labels = doselabels) + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1),
+        plot.title = element_text(hjust = 0.5))
+kable(dosage_groups)
+
+```
+
+
+
 ### Initial Model-Fitting Results
 <!-- should contiain:
 
@@ -185,7 +211,7 @@ $$
 
 Let $y_i$ be a $n_i \times 1$ vector of observations, where $i$ indicates the lab and $n_i$ is equal to the number of observations within lab $i$. So, $y_{ij}$ represents an individual observation for subject $j$ within lab $i$. We apply a Gaussian assumption here and say that each observation is normally distributed for some $\mu_i$ and $\sigma^2_i$. 
 
-We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a population distribution characterizing lab-to-lab variability. This allows our model to be generalizable to future labs. Furthermore, when calculating the MLE of each $\mu_i$, there is less variability because they are pulled in toward the grand mean $\mu$. This introduces bias, but the decrease in variance results in an overall benefit for the MSE.
+We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a population distribution characterizing lab-to-lab variability. This allows our model to be generalizable to future labs. Furthermore, when calculating the MLE of each $\mu_i$, there is less variability because they are pulled in toward the grand mean $\mu$. This introduces bias, but the decrease in varaiance results in an overall benefit for the MSE.
 
 ##### Analysis
 ```{r, echo=FALSE}
@@ -211,10 +237,43 @@ summary(m1.full)
 nova <- anova(m1.reduced, m1.full)
 ```
 
-In our analysis, we choose to add a random effect for the lab variable, in order to account for lab-to-lab heterogeneity. Essentially, this allows us to avoid violating an independence assumption by assuming a different baseline response for each lab. First, we model these differences between individual labs by assuming random intercepts for each lab. We first include only dose1 and dose2 as fixed effects, then introduce proto as a fixed effect after confirming through anova ($p$ < 2.2e-16, $\chi^2$=`r nova[["Chisq"]]`) that it is a significant predictor.
+In our analysis, we choose to add a random effect for the lab variable, in order to account for lab-to-lab heterogeneity. Essentially, this allows us to avoid violating an independence assumption by assuming a different baseline response for each lab. First, we model these differences between individual labs by assuming random intercepts for each lab. We first include only dose1 and dose2 as fixed effects, then introduce proto as a fixed effect after confirming through anova ($p$ < 2.2e-16, $\chi^2$=`r round(nova[["Chisq"]], 4)`) that it is a significant predictor.
+
+```{r, echo = FALSE}
+lmer_list <- function(mod){
+  
+  fixeffmeans <- summary(mod)[["coefficients"]][,1]
+  fixeffsd <- summary(mod)[["coefficients"]][,2]
+  randeffmeans_all <- getME(mod, "theta")
+  numdots <- sapply(names(randeffmeans_all), gregexpr, pattern="." , fixed=TRUE) %>% sapply(length)
+  randeffmeans <- randeffmeans_all[which((numdots) == 1)]
+  randeffvar <- diag(summary(mod)[["varcor"]][["lab"]])
+  residsd <- sigma(mod)
+  
+  fnamz <- names(fixeffmeans)
+  rnamz <- names(randeffvar)
+  namz <- c("Mean Fixed Effects", "Variance Fixed Effects", "Mean Random Effects", "Variance Random Effects", "Residual Variance")
+
+  names(randeffmeans) <- rnamz
+
+  fixefftab <- data.frame(fixeffmeans,fixeffsd^2)
+  names(fixefftab) <- c("Mean Fixed Effects", "Variance Fixed Effects")
+  randefftab <- data.frame(randeffmeans,randeffvar)
+  names(randefftab) <- c("Mean Random Effects", "Variance Random Effects")
+  residtab <- data.frame(residsd^2)
+  names(residtab) <- c("Variance")
+  rownames(residtab) <- c("Residual")
+  
+  return(list(fixefftab, randefftab, residtab))  
+}
+L <- lmer_list(m1.full)
+kable(L[[1]])
+kable(L[[2]])
+kable(L[[3]])
+```
 
 
-With this full model, we see that the variability due to lab is 0.030 (in terms of variance), and variability due to non-lab sources is 0.192. And when we take a look at the fixed effects, we see that an increase in the amount of dose1 corresponds to an increase (0.143 units) in the response variable, log(blot). Furthermore, an increase in the amount of dose2 corresponds to a decrease (-0.508 units) in the response variable. Protocols B, C, and D all lead to an increase in the response variable, relative to protocol A. The diagnostic plots below show that this model fits better than the previous two. Although the residual variance decreases as the fitted values increase, the quantiles of the residuals are approximately normal.
+With this full model, we see that the variability due to lab is 0.028 (in terms of variance), and variability due to non-lab sources is 0.193. And when we take a look at the fixed effects, we see that an increase in the amount of dose1 corresponds to an increase (0.142 units) in the response variable, log(blot). Furthermore, an increase in the amount of dose2 corresponds to a decrease (-0.519 units) in the response variable. Protocols B, C, and D all lead to an increase in the response variable, relative to protocol A. The diagnostic plots below show that this model fits better than the previous two. Although the residual variance decreases as the fitted values increase, the quantiles of the residuals are approximately normal.
 
 ```{r fig.width=15, fig.height=5, echo=FALSE}
 
@@ -226,7 +285,7 @@ par(mfrow = c(1,1))
 
 In our previous random intercept model, we account for baseline differences between labs, but we also assume that the effects of doses is the same for each lab. After plotting the log(blot) versus dose by lab, we see that this is not a valid assumption to make since the lines are clearly not parallel. So we introduce a random slope model. Now, dose1 and dose2 can have varying slopes. 
 
-In this random slope model, we see that the variability due to sources other than the random effects is 0.190 (decreased from 0.192). 
+In this random slope model, we see that the variability due to sources other than the random effects is 0.079 (decreased from 0.193). 
 
 ```{r, echo=FALSE}
 ggplot(data=dat,aes(x=dose1,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 1", y="log(blot)", title="Dose 1 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
