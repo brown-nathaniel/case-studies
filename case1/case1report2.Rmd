@@ -5,13 +5,13 @@ date: "September 6, 2017"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, echo=FALSE}
 set.seed(440)
 knitr::opts_chunk$set(echo = TRUE)
 library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan); library(lme4)
 ```
 
-```{r, warning=FALSE}
+```{r, warning=FALSE, echo=FALSE}
 dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
 dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
 ndat <- nrow(dat)
@@ -23,7 +23,7 @@ dat_test <- dat[testrows,]
 
 Initially, we plotted the blotted weights by body weights, and we noticed that the body weights seemed to be separated into two groups.
 
-```{r, warning=FALSE}
+```{r, warning=FALSE, echo=FALSE}
 weights <- dat[,c("body", "blot")]
 ggplot(data = weights, 
        mapping = aes(x=body, y=blot)) + 
@@ -37,7 +37,7 @@ ggplot(data = weights,
 
 But after color coding the chart by protocol (A,B,C,D) we noticed that the A & B protocols were grouped together and the C & D protocols were grouped together. In class, we were told that two experimental models were used, one for juvenile female rats and another for adult female ovariectomized rats; we were also told that each experimental model was associated with two protocols each. Based on this knowledge, we suspect that the gap in observed weights is likely due to A & B protocols consisting of juvenile (i.e. smaller) rats. 
 
-```{r, warning=FALSE}
+```{r, warning=FALSE, echo=FALSE}
 grpweights <- dat[,c("body", "blot","lab", "proto", "group")]
 
 ggplot(data = grpweights, 
@@ -54,7 +54,7 @@ ggplot(data = grpweights,
 We then created boxplots of body and blotted weight observations across each lab. The data appeared to be right skewed, so we took the log of the response variable and replotted. The resulting boxplots appear to be more normally distributed. It also appears that all the weights vary by lab. It is also worthwhile to note that body weight and uterus weight are not measured on the same scale, but we were not given the units used for either. So, the relative size of each box plot is not to scale. 
 
 
-```{r, warning=FALSE}
+```{r, warning=FALSE, echo=FALSE}
 labweights <- dat[,c("body", "blot", "lab")]
 labweights_long <- melt(labweights, id="lab")
 ggplot(data = labweights_long,
@@ -81,7 +81,7 @@ ggplot(data = labweights_long,
 
 Next, we plotted the body and blotted weight observations according to the protocol that was applied. Again, we logged each of the weight values to account for data skew.
 
-```{r, warning=FALSE}
+```{r, warning=FALSE, echo=FALSE}
 protoweights <- dat[,c("body", "blot", "proto")]
 protoweights_long <- melt(protoweights, id="proto")
 ggplot(data = protoweights_long,
@@ -140,7 +140,7 @@ $$
 
 In this model,$y_i$ is a vector of $n_i$ observations from lab $i$. It assumes that the log blotted weights of each lab follow approximately normal distributions with a their own means.
 
-```{r}
+```{r, echo=FALSE}
 mu_hat <- dat %>% group_by(lab) %>% summarize(blot = mean(blot)) %>% as.data.frame() 
 lab_names <- mu_hat[["lab"]]
 mu_hat <- mu_hat %>% '[['(2) %>% t()
@@ -187,7 +187,7 @@ Let $y_i$ be a $n_i \times 1$ vector of observations, where $i$ indicates the la
 We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a population distribution characterizing lab-to-lab variability. This allows our model to be generalizable to future labs. Furthermore, when calculating the MLE of each $\mu_i$, there is less variability because they are pulled in toward the grand mean $\mu$. This introduces bias, but the decrease in varaiance results in an overall benefit for the MSE.
 
 ##### Analysis
-```{r}
+```{r, echo=FALSE}
 plot_lmer <- function(mod){
   par(mfrow=c(1,3))
   fitvals <- exp(predict(mod, dat_train))
@@ -201,7 +201,7 @@ plot_lmer <- function(mod){
 ```
 
 
-```{r}
+```{r, echo=FALSE}
 # RANDOM INTERCEPT MODEL
 m1.reduced <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat_train, REML = FALSE)
 summary(m1.reduced) 
@@ -227,7 +227,7 @@ In our previous random intercept model, we account for baseline differences betw
 
 In this random slope model, we see that the variability due to sources other than the random effects is 0.190 (decreased from 0.192). 
 
-```{r}
+```{r, echo=FALSE}
 ggplot(data=dat,aes(x=dose1,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 1", y="log(blot)", title="Dose 1 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
 ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 2", y="log(blot)", title="Dose 2 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
 
@@ -286,6 +286,7 @@ The models are similar in their predictive accuracy, although Fixed Dose has a m
 if you plot the line for each lab and they look similar, the dose response is probably reliable 
 if there's a ton of variance, it's probably not reliable because there's a lot of variability between labs 
 
+<!--
 #### Fourth Approach: Bayesian Hierarchical Model
 $$
 y_i \in M_{n_i \times 1}( \Re)
@@ -416,6 +417,9 @@ model {
 fit <- stan(model_code=stan_model2, data = dat_list, 
             iter = 200, chains = 2)
 ```
+
+-->
+
 ### Contributions
 
 Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. 
