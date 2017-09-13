@@ -207,10 +207,10 @@ m1.reduced <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat_train, REML = F
 summary(m1.reduced) 
 m1.full <- lmer(log(blot) ~ dose1 + dose2 + proto + (1|lab), data=dat_train, REML = FALSE)
 summary(m1.full)
-nova <- anova(m1.reduced, m1.full)
+nova1 <- anova(m1.reduced, m1.full)
 ```
 
-In our analysis, we choose to add a random effect for the lab variable, in order to account for lab-to-lab heterogeneity. Essentially, this allows us to avoid violating an independence assumption by assuming a different baseline response for each lab. First, we model these differences between individual labs by assuming random intercepts for each lab. We first include only dose1 and dose2 as fixed effects, then introduce proto as a fixed effect after confirming through anova ($p$ < 2.2e-16, $\chi^2$=`r nova[["Chisq"]]`) that it is a significant predictor.
+In our analysis, we choose to add a random effect for the lab variable, in order to account for lab-to-lab heterogeneity. Essentially, this allows us to avoid violating an independence assumption by assuming a different baseline response for each lab. First, we model these differences between individual labs by assuming random intercepts for each lab. We first include only dose1 and dose2 as fixed effects, then introduce proto as a fixed effect after confirming through anova ($p$ < 2.2e-16, $\chi^2$=`r nova1[["Chisq"]]`) that it is a significant predictor.
 
 
 With this full model, we see that the variability due to lab is 0.030 (in terms of variance), and variability due to non-lab sources is 0.192. And when we take a look at the fixed effects, we see that an increase in the amount of dose1 corresponds to an increase (0.143 units) in the response variable, log(blot). Furthermore, an increase in the amount of dose2 corresponds to a decrease (-0.508 units) in the response variable. Protocols B, C, and D all lead to an increase in the response variable, relative to protocol A. The diagnostic plots below show that this model fits better than the previous two. Although the residual variance decreases as the fitted values increase, the quantiles of the residuals are approximately normal.
@@ -235,7 +235,9 @@ ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line()
 m2 <- lmer(log(blot) ~ proto + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
 m3 <- lmer(log(blot) ~ proto + (I(1/(dose1+0.5)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 #m3 is a much better fit FYI. normal qq is actually a straight line!
-summary(m2)
+m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+0.5)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+# anova shows addition of log(body) is significant 
+nova2 <- anova(m3, m4)
 ```
 
 The diagnostic plots for this model are similar to those for the previous model with fixed intercepts.
