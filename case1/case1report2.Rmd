@@ -1,3 +1,4 @@
+
 ---
 title: "Case 1"
 author: "Nathaniel Brown, Annie Tang, William Yang"
@@ -235,7 +236,9 @@ ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line()
 m2 <- lmer(log(blot) ~ proto + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
 m3 <- lmer(log(blot) ~ proto + (I(1/(dose1+0.5)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 #m3 is a much better fit FYI. normal qq is actually a straight line!
-summary(m2)
+m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+0.5)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+# anova to show addition of log(body) is significant 
+nova <- anova(m3, m4)
 ```
 
 The diagnostic plots for this model are similar to those for the previous model with fixed intercepts.
