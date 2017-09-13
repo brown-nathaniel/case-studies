@@ -283,11 +283,11 @@ par(mfrow = c(1,1))
 ```
 
 
-In our previous random intercept model, we account for baseline differences between labs, but we also assume that the effects of doses is the same for each lab. After plotting the log(blot) versus dose by lab, we see that this is not a valid assumption to make since the lines are clearly not parallel. So we introduce a random slope model. Now, dose1 and dose2 can have varying slopes. 
+In our previous random intercept model, we account for baseline differences between labs, but we also assume that the effects of doses is the same for each lab. After plotting the log(blot) versus dose by lab, we see that this is not a valid assumption to make since the lines are clearly not parallel. So we introduce a random slope model. Now, dose1 and dose2 can have varying slopes.
 
-In this random slope model, we see that the variability due to sources other than the random effects is 0.079 (decreased from 0.193). 
 
 ```{r, echo=FALSE}
+
 ggplot(data=dat,aes(x=dose1,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 1", y="log(blot)", title="Dose 1 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
 ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 2", y="log(blot)", title="Dose 2 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
 
@@ -295,22 +295,19 @@ ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line()
 m2 <- lmer(log(blot) ~ proto + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
 m3 <- lmer(log(blot) ~ proto + (I(1/(dose1+0.5)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 #m3 is a much better fit FYI. normal qq is actually a straight line!
-m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+0.5)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 # anova to show addition of log(body) is significant 
 nova <- anova(m3, m4)
 ```
 
-The diagnostic plots for this model are similar to those for the previous model with fixed intercepts.
+After adding the random slopes, we transformed dose 1 using a reciprocal transformation and added body weight as a predictor in order to have the best fitting model. We evaluate this model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy, which we evaluate using Mean Absolute Error ($\text{MAE} = E[|y - \hat{y}|]$) and Root Mean Squared Error ($\text{RMSE} = \sqrt{E[(y - \hat{y})^2]}$). Root Mean Squared Error penalizes more for extreme error, while Mean Absolute Error simply averages all of the errors.
 
-```{r fig.width=15, fig.height=5, echo = FALSE}
-par(mfrow = c(1,3))
-plot_lmer(m2)
-par(mfrow = c(1,1))
-```
 
-We also evaluate the mixed models by how well they can predict data that they were not trained on. Using a hold-out sample of 25% of the data set, we calculated the results for Root Mean Squared Error ($\text{RMSE} = \sqrt{E[(y - \hat{y})^2]}$) and Mean Absolute Error ($\text{MAE} = E[|y - \hat{y}|]$). Root Mean Squared Error penalizes more for extreme error, while Mean Absolute Error simply averages all of the errors. The results are in the table below:
+```{r, echo=FALSE}
+L2 <- lmer_list(m4)
+kable(L2[[1]]); kable(L2[[2]]); kable(L2[[3]])
 
-```{r prediction, echo=FALSE}
+plot_lmer(m4)
 
 #root mean squared error penalizes more for extreme error
 rms_err <- function(actual, predicted){
@@ -331,24 +328,23 @@ compute_errs <- function(mod, test = dat_test){
   return(list(abs_err = absolute, rms_err = rootmean))
 }
 
-random_dose_errs <- compute_errs(m2)
+random_dose_errs <- compute_errs(m4)
 fixed_dose_errs <- compute_errs(m1.full)
 
 tab <- t(data.frame(x=as.numeric(random_dose_errs),y=as.numeric(fixed_dose_errs)))
 colnames(tab) <- c("MAE","RMSE")
-rownames(tab) <- c("Random Dose", "Fixed Dose")
+rownames(tab) <- c("Random Dose + Transformations", "Fixed Dose")
 kable(tab)
 ```
 
-The models are similar in their predictive accuracy, although Fixed Dose has a marginally better RMSE and MAE for this testing data set. 
+We see that the variability due to sources other than the random effects is 0.0797 (decreased from 0.193). Also, the diagnostic plots improved, although it is notable that the residual variance decreases for larger fitted values. The fixed dose model is also much worse at predicting than the random dose model with transformations.
 
-# sorry annie some of your variance numbers and stuff changed since I split the data up into a training and a testing set.
 
 # TODO: plot lmer results
 if you plot the line for each lab and they look similar, the dose response is probably reliable 
 if there's a ton of variance, it's probably not reliable because there's a lot of variability between labs 
 
-```{r}
+```{r, echo=FALSE}
 #simulate lmer random effects
 sim_params <- function(mod, nsim = 1000){
   
