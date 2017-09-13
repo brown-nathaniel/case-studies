@@ -213,6 +213,17 @@ Let $y_i$ be a $n_i \times 1$ vector of observations, where $i$ indicates the la
 
 We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a population distribution characterizing lab-to-lab variability. This allows our model to be generalizable to future labs. Furthermore, when calculating the MLE of each $\mu_i$, there is less variability because they are pulled in toward the grand mean $\mu$. This introduces bias, but the decrease in varaiance results in an overall benefit for the MSE.
 
+$$
+y_{ij} \sim \beta_{0,i} + \beta_{1,i}x_{ij,d_1} + \beta_{2,i}x_{ij,d_2} + \beta_{3,i}x_{ij,p_B} + \beta_{4,i}x_{ij,p_C} + \beta_{5,i}x_{ij,p_D} + \beta_{6,i}x_{ij,log(w)} + \epsilon
+\\
+\beta_{0:6,i} \sim N(\mu_{0:6,i}, \sigma^2_{0:6,i})
+\\
+\epsilon \sim N(\mu, \sigma^2)
+$$
+Let $y_{ij}$ be the observation for blotted uterus weight for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose1 and dose2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables for which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(bodyweight) for $x_{ij}$. We make the Gaussian assumption that the coefficients $\beta$ are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for lab-to-lab variability in the intercepts and slopes on the blotted weight for the different dosages and protocols.
+
+We start at a reduced form of this model and augment it to its full form after initial analyses.
+
 ##### Analysis
 ```{r, echo=FALSE}
 plot_lmer <- function(mod){
@@ -318,7 +329,7 @@ if there's a ton of variance, it's probably not reliable because there's a lot o
 ```{r}
 #simulate lmer random effects
 sim_params <- function(mod, nsim = 1000){
-  
+  summod = summary(mod)
   fixeffmeans <- summod[["fixef"]]
   randeffmeans_all <- getME(mod, "theta")
   numdots <- sapply(names(randeffmeans_all), gregexpr, pattern="." , fixed=TRUE) %>% sapply(length)
@@ -336,75 +347,7 @@ sim_params <- function(mod, nsim = 1000){
 }
 ```
 
-<!--
-#### Fourth Approach: Bayesian Hierarchical Model
-$$
-y_i \in M_{n_i \times 1}( \Re)
-\\
-\mu \sim \text{Norm}(\mu_0, \tau_0^2)
-\\
-\psi^2 \sim \text{IG}(\eta_0/2, \eta_0\psi_0^2/2)
-\\
-\mu_i \sim \text{Norm}(\mu, \psi^2)
-\\
-\theta_1 \sim \text{Norm}(\theta_{01}, \tau_{01}^2)
-\\
-\theta_2 \sim \text{Norm}(\theta_{02}, \tau_{02}^2)
-\\
-\theta_3 \sim \text{Norm}(\theta_{03}, \tau_{03}^2)
-\\
-\sigma_1^2 \sim \text{IG}(\nu_{01}/2, \nu_{01}\sigma_{01}^2/2)
-\\
-\sigma_2^2 \sim \text{IG}(\nu_{02}/2, \nu_{02}\sigma_{02}^2/2)
-\\
-\sigma_3^2 \sim \text{IG}(\nu_{03}/2, \nu_{03}\sigma_{03}^2/2)
-\\
-\beta_{1i} \sim \text{Norm}(\theta_{1}, \sigma^2_{1})
-\\
-\beta_{2i} \sim \text{Norm}(\theta_{2}, \sigma^2_{2})
-\\
-\beta_{3i} \sim \text{Norm}(\theta_{3}, \sigma^2_{3})
-\\
-\epsilon_{ij} \sim \text{Norm}(0, \sigma^2)
-\\
-y_{ij} = \mu_i + \beta_{1i}x_{1ij} + \beta_{2i}x_{2ij} + \beta_{3i}x_{1ij}x_{2ij} + \epsilon_{ij}
-$$
 
-As an alternative to the classical mixed effects model, hierarchical modeling offers a Bayesian, but essentially equivalent approach. We also added fixed linear effects for the dosages, since the purpose of this study is to investigate the variation of the dosage response curve in different labs. $x_{kij}$ represents the amount of dose $k$ on patient $ij$. The interaction effect is included because dose 2 appears only at a certain level of dose 1.
-
-#STEALING RSTAN CODE
-```{r}
-stanstring <- "
-data {
-  int<lower=0> J;          // # schools
-  real y[J];               // estimated treatment
-  real<lower=0> sigma[J];  // std err of effect
-}
-  parameters {
-  real theta[J];           // school effect
-  real mu;                 // mean for schools
-  real<lower=0> tau;       // variance between schools
-}
-model {
-  theta ~ normal(mu, tau);
-  y ~ normal(theta, sigma);
-}
-"
-
-
-datalist <- list(
-  y = c(28, 8, -3, 7, -1, 1, 18, 12),
-  sigma = c(15, 10, 1, 11, 9, 11, 10, 18)
-)
-datalist$J = length(datalist[["y"]])
-# schools <- stan(model_code = stanstring, 
-#                 data = datalist,
-#                 pars = c("theta", "mu", "tau"),
-#                 iter = 1000, chains = 1
-#)
-```
-
--->
 
 ### Contributions
 
