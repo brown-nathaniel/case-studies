@@ -200,18 +200,15 @@ A weakness of this model is that, as you add more structure (blocking factors, c
 #### Third Approach: Mixed Effects
 
 $$
-y_i \in M_{n_i \times 1}( \Re)
+y_{ij} \sim \beta_{0,i} + \beta_{1,i}x_{ij,d_1} + \beta_{2,i}x_{ij,d_2} + \beta_{3,i}x_{ij,p_B} + \beta_{4,i}x_{ij,p_C} + \beta_{5,i}x_{ij,p_D} + \beta_{6,i}x_{ij,log(w)} + \epsilon
 \\
-\mu_i \sim \text{Norm}(\mu, \psi^2)
+\beta_{0:6,i} \sim N(\mu_{0:6,i}, \sigma^2_{0:6,i})
 \\
-\sigma_i^2 \sim \text{IG}(\nu/2, \nu\sigma^2/2)
-\\
-y_{ij} \sim \text{Norm}(\mu_i, \sigma^2_i)
+\epsilon \sim N(\mu, \sigma^2)
 $$
+Let $y_{ij}$ be the observation for log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose1 and dose2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables for which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(bodyweight) for $x_{ij}$. We make the Gaussian assumption that the coefficients $\beta$ are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for lab-to-lab variability in the intercepts and slopes on the blotted weight for the different dosages and protocols.
 
-Let $y_i$ be a $n_i \times 1$ vector of observations, where $i$ indicates the lab and $n_i$ is equal to the number of observations within lab $i$. So, $y_{ij}$ represents an individual observation for subject $j$ within lab $i$. We apply a Gaussian assumption here and say that each observation is normally distributed for some $\mu_i$ and $\sigma^2_i$. 
-
-We then add a random effect on $\mu_i$, so $\text{Norm}(\mu, \psi^2)$ gives us a population distribution characterizing lab-to-lab variability. This allows our model to be generalizable to future labs. Furthermore, when calculating the MLE of each $\mu_i$, there is less variability because they are pulled in toward the grand mean $\mu$. This introduces bias, but the decrease in varaiance results in an overall benefit for the MSE.
+We start at a reduced form of this model and augment it to its full form after initial analyses.
 
 ##### Analysis
 ```{r, echo=FALSE}
@@ -231,7 +228,6 @@ plot_lmer <- function(mod){
 ```{r, echo=FALSE}
 # RANDOM INTERCEPT MODEL
 m1.reduced <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat_train, REML = FALSE)
-summary(m1.reduced) 
 m1.full <- lmer(log(blot) ~ dose1 + dose2 + proto + (1|lab), data=dat_train, REML = FALSE)
 summary(m1.full)
 nova <- anova(m1.reduced, m1.full)
@@ -273,7 +269,7 @@ kable(L[[3]])
 ```
 
 
-With this full model, we see that the variability due to lab is 0.028 (in terms of variance), and variability due to non-lab sources is 0.193. And when we take a look at the fixed effects, we see that an increase in the amount of dose1 corresponds to an increase (0.142 units) in the response variable, log(blot). Furthermore, an increase in the amount of dose2 corresponds to a decrease (-0.519 units) in the response variable. Protocols B, C, and D all lead to an increase in the response variable, relative to protocol A. The diagnostic plots below show that this model fits better than the previous two. Although the residual variance decreases as the fitted values increase, the quantiles of the residuals are approximately normal.
+With this full model, we see that the variability due to lab is 0.028 (in terms of variance), and variability due to residual error is 0.193. And when we take a look at the fixed effects, we see that an increase in the amount of dose1 corresponds to an increase (0.142 units) in the response variable, log(blot). Furthermore, an increase in the amount of dose2 corresponds to a decrease (-0.519 units) in the response variable. Protocols B, C, and D all lead to an increase in the response variable, relative to protocol A. The diagnostic plots below show that this model fits better than the previous two. Although the residual variance decreases as the fitted values increase, the quantiles of the residuals are approximately normal.
 
 ```{r fig.width=15, fig.height=5, echo=FALSE}
 
@@ -341,8 +337,6 @@ kable(tab)
 ```
 
 The models are similar in their predictive accuracy, although Fixed Dose has a marginally better RMSE and MAE for this testing data set. 
-
-# sorry annie some of your variance numbers and stuff changed since I split the data up into a training and a testing set.
 
 # TODO: plot lmer results
 if you plot the line for each lab and they look similar, the dose response is probably reliable 
