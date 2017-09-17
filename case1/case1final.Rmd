@@ -1,0 +1,116 @@
+---
+title: "case1final"
+author: "Nathaniel Brown, Annie Tang, William Yang"
+date: "September 13, 2017"
+---
+
+
+```{r setup, include=FALSE, echo=FALSE}
+set.seed(440)
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan); library(lme4)
+```
+
+
+```{r, warning=FALSE, echo=FALSE}
+dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
+dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
+ndat <- nrow(dat)
+trainrows <- sample(x=1:ndat, size = ceiling(0.75*ndat))
+testrows <- setdiff(1:ndat, trainrows)
+dat_train <- dat[trainrows,]
+dat_test <- dat[testrows,]
+```
+
+### Introduction
+
+#UNFINISHED!!!
+  The purpose of this project is to analyze rat bioassays. is there variation in results between labs? there shouldn't be.
+
+### Analysis
+
+#UNFINISHED!!!
+  We fit models to try to understand the variation between labs. Our approaches were univariate normal, multivariate normal, and mixed effects.
+
+#### First Approach: Univariate Normal
+
+$$
+log(y) \sim \text{Norm}(\mu , \sigma^2)
+$$
+
+```{r fig.width=15, fig.height=5, echo=FALSE}
+mod1 <- lm(log(blot) ~ 1, data = dat)
+resid_title <- "Residuals vs. Fitted Values"
+qq_title <- "Normal Quantile-Quantile Plot"
+hist_title <- "Histogram of Residuals"
+par(mfrow=c(1,3))
+logmeans <- data.frame(blot = log(dat$blot), lmean =mean(log(dat$blot)) )
+plot(mod1,1)
+plot(mod1,2)
+hist(mod1$residuals, breaks=25, main = hist_title, col="gray", xlab="")
+par(mfrow=c(1,1))
+```
+
+This naive approach assumes the blotted weight follows a normal distribution with a mean centered around the mean of the log blotted weight (`r round(mean(log(dat$blot)),4)`) and constant variance. The diagnostic plots below show that the same value is predicted for each input, the quantiles of the residuals do not follow a normal distrbution, and that the residuals are bimodal. We believe bimodality may be caused by the separation of rats into juvenille and adult protocols.
+
+#### Second Approach: Multivariate Normal
+
+$$
+y_i, \mu \in M_{n_i \times 1}( \Re)
+\\
+\Sigma \in M_{n \times n}( \Re)
+\\ 
+log(y_i) \sim \text{MVNorm}(\mu, \Sigma)
+$$
+
+In this model,$y_i$ is a vector of $n_i$ observations from lab $i$. It assumes that the log blotted weights of each lab follow approximately normal distributions with a their own means.
+
+```{r, echo=FALSE}
+mu_hat <- dat %>% group_by(lab) %>% summarize(blot = mean(blot)) %>% as.data.frame() 
+lab_names <- mu_hat[["lab"]]
+mu_hat <- mu_hat %>% '[['(2) %>% t()
+colnames(mu_hat) <- lab_names
+mod2 <- lm(log(mu_hat) ~ 1)
+```
+
+We provide the diagnosis plots for the first lab, `Basf`, and we put the others in Appendix 1.1, since R does not support plotting for multivariate regression models.
+```{r fig.width=15, fig.height=5, echo=FALSE}
+plot_mvn <- function(mod = NA, lab_name = NA){
+  lab_ind <- which(lab_names == lab_name)
+  newdat <- dat %>% filter(lab == lab_name) %>% select(blot) %>% log()
+  fitvals <- predict(mod, newdata=newdat)[,lab_ind]
+  resids <- fitvals - newdat[[1]]
+  plot(fitvals, resids, main=paste(resid_title, ": ", lab_name, " Lab", sep=""), xlab = "Fitted Values", ylab = "Residuals"); abline(h=0)
+  qqnorm(resids, main=paste(qq_title, ": ", lab_name, " Lab", sep="")); qqline(resids) 
+  hist(resids, breaks=25, main=paste(hist_title, ": ", lab_name, " Lab", sep=""), xlab = "Residuals", col="gray")
+}
+
+par(mfrow=c(1,3))
+plot_mvn(mod2, "Basf")
+par(mfrow=c(1,1))
+```
+
+The diagnostic plots for this model indicate that the model predicts the same fitted value for each lab, and that the residual quantiles do not follow a normal distribution. For the `Basf` lab, the histogram of residuals shows left skew. These same problems, along with multimodality of the residuals, are present for the diagnostic plots for the remaining labs in the Appendix. 
+
+A weakness of this model is that, as you add more structure (blocking factors, covariates for dosage, etc.) to the model, the covariance matrix becomes more complicated, and maximum likelihood estimation becomes unwieldy. The poor fit of this model indicates that we should control for more than just the lab effect, so we consider a mixed effects model.
+
+#### Third Approach: Mixed Effects
+
+### Conclusion
+
+Because the dose 1 effect has such a high variance relative to the mean, our model shows that the bioassay being studied does not measure a consistent response to dosage across labs.
+
+### Contributions
+
+Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. Nathanial implemented analysis for the univariate normal and multivariate normal approaches. Implementation and analysis of the mixed effects model was a joint effort by all members of the group. 
+
+### Appendix
+
+#### 1.1: Multivariate Normal Diagnosis Plots
+```{r fig.height=5, fig.width=15, echo = FALSE}
+par(mfrow = c(1,3))
+for(name in lab_names[-1]){
+  plot_mvn(mod2, name)
+}
+```
+
