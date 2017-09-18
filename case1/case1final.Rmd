@@ -11,13 +11,14 @@ output:
 ```{r setup, include=FALSE, echo=FALSE}
 set.seed(440)
 knitr::opts_chunk$set(echo = TRUE)
-library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan); library(lme4)
+library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan); library(lme4); library(mvtnorm)
 ```
 
 
 ```{r, warning=FALSE, echo=FALSE}
 dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
 dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
+
 ndat <- nrow(dat)
 trainrows <- sample(x=1:ndat, size = ceiling(0.75*ndat))
 testrows <- setdiff(1:ndat, trainrows)
@@ -44,26 +45,43 @@ Let $y_{ij}$ be the observation for log(blotted uterus weight) for subject $x_{i
 We start at a reduced form of this model and augment it to its full form after initial analyses.
 
 ```{r, echo=FALSE}
-plot_lmer <- function(mod){
-  par(mfrow=c(2,3))
+plot_lmer <- function(mod, parmfrow = NA){
+  
+  par(mfrow = parmfrow)
+
   fitvals <- exp(predict(mod, dat_train))
   resids <- summary(mod)[["residuals"]]
 
   plot(fitvals, resids, main = "Residuals vs. Fitted Values", xlab = "Fitted Values", ylab = "Residuals"); abline(h=0)
   qqnorm(resids, main = "Normal Quantile-Quantile Plot")
   hist(resids, main = "Histogram of Residuals", xlab="Residuals", col = "gray")
-  #par(mfrow=c(1,2))
   
   continuouseffects <- grep("(dose)|(body)", colnames(coef(mod)[[1]]), value=TRUE)
+
+  #for cases when we interact with proto
+  continuouseffects <- gsub(":", "')*", continuouseffects)
+  continuouseffects <- lapply(
+    strsplit(continuouseffects, "proto"),
+    function(l){
+      if(length(l) > 1){
+        return(paste0("(proto=='", l[2]))
+      }
+      return(l)
+    }
+  )
   X <- apply(as.matrix(continuouseffects), 1,
         function(x){
           with(dat_train, eval(parse(text = x)))
         }
   )
   for(c in 1:ncol(X)){
-    plot(X[,c], resids, main = "Residuals vs. Predictor" , xlab = continuouseffects[c] )
+    if(grepl("proto", continuouseffects[c])){
+      plot(X[,c][X[,c] > 0], resids[X[,c] > 0], main = "Residuals vs. Predictor" , xlab = continuouseffects[c])
+    }else{
+      plot(X[,c], resids, main = "Residuals vs. Predictor" , xlab = continuouseffects[c])
+    }
   }
-  
+  par(mfrow=c(1,1))
 }
 
 ```
@@ -89,23 +107,27 @@ lmer_list <- function(mod){
   randeffvar <- diag(summary(mod)[["varcor"]][["lab"]])
   residsd <- sigma(mod)
   
-  fnamz <- names(fixeffmeans)
-  rnamz <- names(randeffvar)
-  namz <- c("Mean Fixed Effects", "Variance Fixed Effects", "Mean Random Effects", "Variance Random Effects", "Residual Variance")
+  names(randeffmeans) <- names(randeffvar)
 
-  names(randeffmeans) <- rnamz
-
-  fixefftab <- data.frame(fixeffmeans,fixeffsd^2) %>% round(4)
-  names(fixefftab) <- c("Mean Fixed Effects", "Variance Fixed Effects")
-  randefftab <- data.frame(randeffmeans,randeffvar) %>% round(4)
-  names(randefftab) <- c("Mean Random Effects", "Variance Random Effects")
-  residtab <- data.frame(residsd^2) %>% round(4)
-  names(residtab) <- c("Variance")
-  rownames(residtab) <- c("Residual")
+  fixefftab <- data.frame(fixeffmeans,fixeffsd^2)
+  names(fixefftab) <- c("mean", "variance")
+  randefftab <- data.frame(randeffmeans,randeffvar)
+  names(randefftab) <- c("mean", "variance")
+  residtab <- data.frame(residsd^2)
+  names(residtab) <- c("variance")
+  rownames(residtab) <- c("residual")
   
-  return(list(fixefftab, randefftab, residtab))  
+  return(list(fixed = fixefftab, random = randefftab, residual = residtab))  
 }
-L <- lmer_list(m1.full)
+format_lmer_list <- function(L = NA){
+  colnames(L$fixed) <- c("Mean Fixed Effects", "Variance Fixed Effects")
+  colnames(L$random) <-  c("Mean Random Effects", "Variance Random Effects")
+  colnames(L$residual) <- c("Residual Variance")
+  
+  L <- lapply(L, round, 4)
+  return(L)
+}
+L <- format_lmer_list(lmer_list(m1.full))
 kable(L[[1]])
 kable(L[[2]])
 kable(L[[3]])
@@ -116,9 +138,7 @@ With this full model, we see that the variability due to lab is 0.028 (in terms 
 
 ```{r fig.width=15, fig.height=10, echo=FALSE}
 
-par(mfrow = c(1,3))
-plot_lmer(m1.full)
-par(mfrow = c(1,1))
+plot_lmer(m1.full, parmfrow=c(2,3))
 ```
 
 
@@ -143,10 +163,10 @@ After adding the random slopes, we transformed dose 1 by the reciprocal of (dose
 
 
 ```{r, fig.height=10, fig.width=15, echo=FALSE}
-L2 <- lmer_list(m4)
+L2 <- format_lmer_list(lmer_list(m4))
 kable(L2[[1]]); kable(L2[[2]]); kable(L2[[3]])
 
-plot_lmer(m4)
+plot_lmer(m4, parmfrow = c(2,3))
 
 #root mean squared error penalizes more for extreme error
 rms_err <- function(actual, predicted){
@@ -174,9 +194,16 @@ tab <- t(data.frame(x=as.numeric(random_dose_errs),y=as.numeric(fixed_dose_errs)
 colnames(tab) <- c("MAE","RMSE")
 rownames(tab) <- c("Random Dose + Transformations", "Fixed Dose")
 kable(tab)
+
+m5 <- lmer(log(blot) ~ proto * log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+nova5 <- anova(m4, m5)
+
+
 ```
 
-We see that the variability due to sources other than the random effects is 0.0797 (decreased from 0.193). Also, the diagnostic plots improved, although it is notable that the residual variance decreases for larger fitted values. The fixed dose model is also much worse at predicting than the random dose model with transformations.
+We see that the variability due to sources other than the random effects is 0.0797 (decreased from 0.193). Also, the diagnostic plots improved, although it is notable that the residual variance decreases for larger fitted values. The fixed dose model is also much worse at predicting than the random dose model with transformations. We still see problems with this model, including the non-randomness in the body weight residuals. To counteract this, we added interactions between log body weight and protocol, and an anova test ($p$ = `r round(nova5[["Pr(>Chisq)"]][length(nova[["Pr(>Chisq)"]])], 4)`, $\chi^2$=`r round(nova[["Chisq"]][length(nova[["Chisq"]])], 4)`) confirmed that the interactions improve the model.
+
+##m5 stuff
 
 ### Lab Variation
 
@@ -184,15 +211,55 @@ We see that the variability due to sources other than the random effects is 0.07
 The plot below samples random dose1 effects (slopes) and lab effects (intercepts) from the mixed model, holding all other predictors constant, and plots the results. The variance in the dose1 effects by lab is noticeably high, so we say that the bioassay does depend on lab and thus this study fails miserably. 
 ```{r, echo=FALSE}
 nsim <- 1000
-L3 <- lmer_list(m4)
+
 reverse_trans <- function(dosetrans){
   return(1/dosetrans - 1/2)
 }
-randslopes <- rnorm(nsim, L3[[2]][2,1], sqrt(L3[[2]][2,2])) #%>% reverse_trans()
-randinters <- rnorm(nsim, L3[[2]][1,1], sqrt(L3[[2]][1,2]))
-randlines <- data.frame(a = randinters, b=randslopes, x=seq(-10, 10, length.out=nsim), y=seq(-10, 10, length.out = nsim))
-ggplot(data=randlines, aes(x, y)) + geom_blank() + geom_abline(data=randlines, aes(intercept=a,slope=b), color="gray") + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"))
+# randslopes <- rnorm(nsim, L3[[2]][2,1], sqrt(L3[[2]][2,2])) #%>% reverse_trans()
+# randinters <- rnorm(nsim, L3[[2]][1,1], sqrt(L3[[2]][1,2]))
+# randlines <- data.frame(a = randinters, b=randslopes, x=seq(-10, 10, length.out=nsim), y=seq(-10, 10, length.out = nsim))
+#ggplot(data=randlines, aes(x, y)) + geom_blank() + geom_abline(data=randlines, aes(intercept=a,slope=b), color="gray") + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"))
 
+simdose1curves <- function(mod, nsim = 1000){
+  
+  #simulated data
+  L <- lmer_list(mod)
+  MEANS <- c(L[["random"]]["(Intercept)", "mean"], L[["random"]][grep("dose1", rownames(L[["random"]])), "mean"])
+  
+  COR_full <- attr(VarCorr(mod)[[1]], "correlation")
+
+  dose1ind <- grep("dose1", rownames(COR_full))
+  interind <- grep("Inter", rownames(COR_full))
+  
+  COR <- COR_full[c(interind,dose1ind), c(interind,dose1ind)]
+  sdxy <- prod(attr(VarCorr(mod)[[1]], "stddev")[c(interind,dose1ind)])
+  #cov(x,y) = cor(x,y)*sd(x)sd(y)
+  COV <- COR * sdxy
+  sims <- rmvnorm(nsim, mean = MEANS, sigma = COV)
+  dose1sims <- sims[,2]
+  labsims <- sims[,1]
+  
+  #constant data
+  protoeffect <- 0 #just assume baseline protocol
+  dose2 <- 0 
+  dose2effect <- eval(parse(text = grep("dose2", rownames(L$random), value=T))) #in case dose2 needs to be transformed
+  fixedintereffect <- L$fixed["(Intercept)","mean"]
+  protoeffect <- 0 
+  body <- log(mean(dat_train$body))
+  bodyeffect <- log(body)*(L$fixed[grep("body", rownames(L$fixed)), "mean"])
+  
+  dose1 <- seq(0,10, 0.1)
+  dose1trans <- eval(parse(text = grep("dose1", rownames(L$random), value=T)))
+  dose1effect <- (apply(t(dose1trans), 2, '*', dose1sims))
+  
+  response <- exp(fixedintereffect + protoeffect + bodyeffect + dose2effect + labsims + dose1effect)
+
+  plot(c(0,0), xlim = c(min(dose1), max(dose1)), ylim = c(quantile(response, 0.01), quantile(response, 0.99)))
+  for(r in 1:nrow(response)){ #for each simulation...
+    lines(dose1, response[r,])
+  }
+}
+simdose1curves(m5)
 ```
 
 <!--
