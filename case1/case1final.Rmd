@@ -119,36 +119,37 @@ lmer_list <- function(mod){
   # randeffmeans_all <- getME(mod, "theta")
   # numdots <- sapply(names(randeffmeans_all), gregexpr, pattern="." , fixed=TRUE) %>% sapply(length)
   # randeffmeans <- randeffmeans_all[which((numdots) == 1)]
-  randeffmeans <- ranef(mod)[["lab"]] %>% apply(2,mean)
+  #randeffmeans <- ranef(mod)[["lab"]] %>% apply(2,mean)
+  randeffmeans <- t(ranef(mod)[["lab"]]) 
   randeffvar <- diag(summary(mod)[["varcor"]][["lab"]])
   residsd <- sigma(mod)
   
-  names(randeffmeans) <- names(randeffvar)
+  #names(randeffmeans) <- names(randeffvar)
 
   fixefftab <- data.frame(fixeffmeans,fixeffsd^2)
   names(fixefftab) <- c("mean", "variance")
-  randefftab <- data.frame(randeffmeans,randeffvar)
-  names(randefftab) <- c("mean", "variance")
+  #randefftab <- data.frame(randeffmeans,randeffvar)
+  #names(randefftab) <- c("mean", "variance")
   residtab <- data.frame(residsd^2)
   names(residtab) <- c("variance")
   rownames(residtab) <- c("residual")
   
-  return(list(fixed = fixefftab, random = randefftab, residual = residtab))  
+  return(list(fixed = fixefftab, randommeans = randeffmeans, randomvars = randeffvar, residual = residtab))  
 }
+
 format_lmer_list <- function(L = NA){
+
   colnames(L$fixed) <- c("Mean Fixed Effects", "Variance Fixed Effects")
-  colnames(L$random) <-  c("Mean Random Effects", "Variance Random Effects")
   colnames(L$residual) <- c("Residual Variance")
-  
   L <- lapply(L, round, 4)
   return(L)
 }
 
-simdose1curves <- function(mod, nsim = 1000, untrans_y = exp){
+simdose1curves <- function(mod, nsim = 1000, untrans_y = exp, lab = NA, showoriginaldata = FALSE){
   
   #simulated data
   L <- lmer_list(mod)
-  MEANS <- c(L[["random"]]["(Intercept)", "mean"], L[["random"]][grep("dose1", rownames(L[["random"]])), "mean"])
+  MEANS <- c(L[["randommeans"]]["(Intercept)", lab], L[["randommeans"]][grep("dose1", rownames(L[["randommeans"]])), lab])
   
   COR_full <- attr(VarCorr(mod)[[1]], "correlation")
 
@@ -166,22 +167,26 @@ simdose1curves <- function(mod, nsim = 1000, untrans_y = exp){
   #constant data
   protoeffect <- 0 #just assume baseline protocol
   dose2 <- 0 
-  dose2trans <- eval(parse(text = grep("dose2", rownames(L$random), value=T))) #in case dose2 needs to be transformed
-  dose2effect <- dose2trans*L$random[grep("dose2", rownames(L$random)), "mean"]
+  dose2trans <- eval(parse(text = grep("dose2", rownames(L$randommeans), value=T))) #in case dose2 needs to be transformed
+  dose2effect <- dose2trans*L$randommeans[grep("dose2", rownames(L$randommeans)), lab]
   fixedintereffect <- L$fixed["(Intercept)","mean"]
   protoeffect <- 0 
   body <- (mean(dat_train$body))
   bodyeffect <- log(body)*(L$fixed[grep("body", rownames(L$fixed)), "mean"])
   
   dose1 <- seq(0,10, 0.1)
-  dose1trans <- eval(parse(text = grep("dose1", rownames(L$random), value=T)))
+  dose1trans <- eval(parse(text = grep("dose1", rownames(L$randommeans), value=T)))
   dose1effect <- (apply(t(dose1trans), 2, '*', dose1sims))
   
-  response <- untrans_y(fixedintereffect + protoeffect + bodyeffect + dose2effect + labsims + dose1effect)
+  response <- matrix(untrans_y(fixedintereffect + protoeffect + bodyeffect + dose2effect + labsims + dose1effect), nrow = nsim)
 
-  plot(c(0,0), xlim = c(min(dose1), max(dose1)), ylim = c(quantile(response, 0.01), quantile(response, 0.99)), xlab = "Dose 1", ylab="Blotted Uterus Weight", main = "Dose 1 Response Curve")
+  plot(c(0,0), xlim = c(min(dose1), max(dose1)), ylim = c(0,500), xlab = "Dose 1", ylab="Blotted Uterus Weight", main = paste("Dose 1 Response Curve for", lab, "Lab"))
   for(r in 1:nrow(response)){ #for each simulation...
     lines(dose1, response[r,], col="gray")
+  }
+  
+  if(showoriginaldata){
+    points(x=dat$dose1, y=dat$blot)
   }
 }
 
@@ -250,54 +255,60 @@ grid.arrange( graph1, graph2, ncol=2)
 
 \par
 
-```{r tab1, echo=FALSE}
+```{r tab1}
 L1 <- format_lmer_list(L1)
-kable(L1[[1]])
+kable(L1[[1]], caption = "Summary Statistics of Initial Model")
 kable(L1[[2]])
-kable(L1[[3]], caption = "Summary Statistics of Initial Model")
+kable(L1[[3]])
+kable(L1[[4]])
 ```
 
 
 
-```{r fig3, echo=FALSE, fig.height=10, fig.width=15}
+```{r fig3, echo=FALSE, fig.height=10, fig.width=15, fig.cap="Diagnostic Plots of Initial Model"}
 plot_lmer(m1, c(2,3))
 ```
 
 Among the problems in these plots is the nonlinearity in the Residuals vs. Predictor plot for dose1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) (we add a small number to dose because we cannot take the reciprocal of zero). We evaluate this transformed model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy, which we measure using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors. The results are in the following tables and figures:
 
 
-```{r tab2, echo=FALSE}
+```{r tab2}
 L2 <- format_lmer_list(L2)
-kable(L2[[1]]); kable(L2[[2]]); kable(L2[[3]])
-
+kable(L2[[1]], caption = "Summary Statistics of Transformed Dose 1")
+kable(L2[[2]])
+kable(L2[[3]])
+kable(L2[[4]])
 ```
 
-```{r fig4, fig.height=10, fig.width=15, echo=FALSE}
+```{r fig4, fig.height=10, fig.width=15, fig.cap="Diagnostic Plots of Model with Transformed Dose 1"}
 plot_lmer(m2, parmfrow = c(2,3))
 ```
 
-```{r tab3, echo=FALSE}
-tab <- t(data.frame(x=as.numeric(errs2),y=as.numeric(errs1)))
-colnames(tab) <- c("MAE","RMSE")
-rownames(tab) <- c("Transformed Dose 1", "Initial")
-kable(tab)
+```{r tab3}
+errtab <- t(data.frame(x=as.numeric(errs1),y=as.numeric(errs2), z=as.numeric(errs3)))
+colnames(errtab) <- c("MAE","RMSE")
+rownames(errtab) <- c("Initial", "Reciprocal Dose 1", "Transformed Dose 1 and Uterus Weight")
+kable(errtab[-3,], caption = "Predictive Error of First Two Models")
 
 ```
 
 **comment comment comment**. Another problem with these residual plots is the slight arching in the Residuals vs. Fitted Values. To counteract this, we added a square root transformation to the response. **well then again we might not*** The results are below:
 
 
-```{r, echo=FALSE}
+```{r tab4}
 L3 <- format_lmer_list(L3)
-kable(L3[[1]]); kable(L3[[2]]); kable(L3[[3]])
+kable(L3[[1]], caption = "")
+kable(L3[[2]])
+kable(L3[[3]])
+kable(L3[[4]])
+```
 
+```{r fig5}
 plot_lmer(m3, parmfrow = c(2,3), expsq)
+```
 
-tab <- t(data.frame(x=as.numeric(errs3),y=as.numeric(errs2)))
-colnames(tab) <- c("MAE","RMSE")
-rownames(tab) <- c("Transformed Response and Dose 1", "Transformed Dose 1")
-kable(tab)
-
+```{r tab5}
+kable(errtab, caption = "Predictive Error of All Models")
 ```
 
 This is our best-fitting mixed model we could fit. **maybe. it looks like sqrt log blot improves residual plot but worsens prediction**
@@ -306,10 +317,13 @@ This is our best-fitting mixed model we could fit. **maybe. it looks like sqrt l
 
 #INCOMPLETE 
 The plot below samples random dose1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve. 
-```{r, echo=FALSE}
+```{r fig6, fig.height=51, fig.width=15, fig.cap="Dose 1 Response Curves for Each Lab", }
 
-simdose1curves(m4)
-
+par(mfrow = c(7,3))
+for(eachlab in unique(dat$lab)){
+  simdose1curves(m3, 100, expsq, eachlab)
+}
+par(mfrow = c(1,1))
 ```
 
 <!--
