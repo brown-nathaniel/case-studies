@@ -3,14 +3,14 @@ title: "case1final"
 author: "Nathaniel Brown, Annie Tang, William Yang"
 date: "September 13, 2017"
 output:
-  pdf_document: default
   html_document: default
   fig_caption: yes
+  pdf_document: default
 ---
 
 
 ```{r setup, include=FALSE, echo=FALSE}
-set.seed(40)
+set.seed(440)
 knitr::opts_chunk$set(echo = TRUE)
 library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan); library(lme4); library(mvtnorm); library(gridExtra)
 ```
@@ -43,21 +43,18 @@ y_{ij} \sim \beta_{0,i} + \beta_{1,i}x_{ij,d_1} + \beta_{2,i}x_{ij,d_2} + \beta_
 \epsilon \sim N(0, \sigma^2)
 $$
 
-To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose1 and dose2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. Body weight and uterus weight are log-transformed to account for the right skew in the data (Fig. 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Fig. 2). The summary statistics of the model described above can be found on Table 1.
+To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose1 and dose2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. Body weight and uterus weight are log-transformed to account for the right skew in the data (Figure 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Figure 2). The summary statistics of the model described above can be found on Table 1.
 
 We start at a reduced form of this model and augment it to its full form after initial analyses.
 
-```{r fxns, echo=FALSE}
-expsq <- function(x){
-  exp(x)^2
-}
-plot_lmer <- function(mod, parmfrow = NA, untrans_y = exp){
+```{r plot_lmer, echo=FALSE}
+plot_lmer <- function(mod, parmfrow = NA){
   if(mean(is.na(parmfrow) > 0)){
     par(mfrow = c(1,1))
   }else{
     par(mfrow = parmfrow)
   }
-  fitvals <- untrans_y(predict(mod, dat_train))
+  fitvals <- exp(predict(mod, dat_train))
   resids <- summary(mod)[["residuals"]]
 
   plot(fitvals, resids, main = "Residuals vs. Fitted Values", xlab = "Fitted Values", ylab = "Residuals"); abline(h=0)
@@ -92,25 +89,9 @@ plot_lmer <- function(mod, parmfrow = NA, untrans_y = exp){
   par(mfrow=c(1,1))
 }
 
+```
 
-#root mean squared error penalizes more for extreme error
-rms_err <- function(actual, predicted){
-  error <- actual - predicted
-  return(sqrt(mean((error)^2)))
-}
- 
-#absolute error weighs all error equally
-abs_err <- function(actual, predicted){
-  error <- actual - predicted
-  mean(abs(error))
-}
- 
-compute_errs <- function(mod, test = dat_test, untrans_y = exp){
-  preds <- untrans_y(predict(mod, test))
-  absolute <- abs_err(test$blot, preds) %>% round(4)
-  rootmean <- rms_err(test$blot, preds) %>% round(4)
-  return(list(abs_err = absolute, rms_err = rootmean))
-}
+```{r lmer_list, echo=FALSE}
 
 lmer_list <- function(mod){
   
@@ -119,7 +100,6 @@ lmer_list <- function(mod){
   randeffmeans_all <- getME(mod, "theta")
   numdots <- sapply(names(randeffmeans_all), gregexpr, pattern="." , fixed=TRUE) %>% sapply(length)
   randeffmeans <- randeffmeans_all[which((numdots) == 1)]
-  #randeffmeans <- ranef(m4)[["lab"]] %>% apply(2,mean)
   randeffvar <- diag(summary(mod)[["varcor"]][["lab"]])
   residsd <- sigma(mod)
   
@@ -143,70 +123,6 @@ format_lmer_list <- function(L = NA){
   L <- lapply(L, round, 4)
   return(L)
 }
-
-simdose1curves <- function(mod, nsim = 1000, untrans_y = exp){
-  
-  #simulated data
-  L <- lmer_list(mod)
-  MEANS <- c(L[["random"]]["(Intercept)", "mean"], L[["random"]][grep("dose1", rownames(L[["random"]])), "mean"])
-  
-  COR_full <- attr(VarCorr(mod)[[1]], "correlation")
-
-  dose1ind <- grep("dose1", rownames(COR_full))
-  interind <- grep("Inter", rownames(COR_full))
-  
-  COR <- COR_full[c(interind,dose1ind), c(interind,dose1ind)]
-  sdxy <- prod(attr(VarCorr(mod)[[1]], "stddev")[c(interind,dose1ind)])
-  #cov(x,y) = cor(x,y)*sd(x)sd(y)
-  COV <- COR * sdxy
-  sims <- rmvnorm(nsim, mean = MEANS, sigma = COV)
-  dose1sims <- sims[,2]
-  labsims <- sims[,1]
-  
-  #constant data
-  protoeffect <- 0 #just assume baseline protocol
-  dose2 <- 0 
-  dose2trans <- eval(parse(text = grep("dose2", rownames(L$random), value=T))) #in case dose2 needs to be transformed
-  dose2effect <- dose2trans*L$random[grep("dose2", rownames(L$random)), "mean"]
-  fixedintereffect <- L$fixed["(Intercept)","mean"]
-  protoeffect <- 0 
-  body <- (mean(dat_train$body))
-  bodyeffect <- log(body)*(L$fixed[grep("body", rownames(L$fixed)), "mean"])
-  
-  dose1 <- seq(0,10, 0.1)
-  dose1trans <- eval(parse(text = grep("dose1", rownames(L$random), value=T))) %>% rev()
-  dose1effect <- (apply(t(dose1trans), 2, '*', dose1sims))
-  
-  response <- untrans_y(fixedintereffect + protoeffect + bodyeffect + dose2effect + labsims + dose1effect)
-
-  plot(c(0,0), xlim = c(min(dose1), max(dose1)), ylim = c(quantile(response, 0.01), quantile(response, 0.99)), xlab = "Dose 1", ylab="Blotted Uterus Weight", main = "Dose 1 Response Curve")
-  for(r in 1:nrow(response)){ #for each simulation...
-    lines(dose1, response[r,], col="gray")
-  }
-}
-
-```
-
-
-```{r models}
-# RANDOM SLOPE MODEL
-m1 <- lmer(log(blot) ~ proto + log(body) + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
-
-m2 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
-
-m3 <- lmer(sqrt(log(blot)) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
-
-m4 <- lmer((log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
-
-L1 <- lmer_list(m1)
-L2 <- lmer_list(m2)
-L3 <- lmer_list(m3)
-L4 <- lmer_list(m4)
-
-errs1 <- compute_errs(m1)
-errs2 <- compute_errs(m2)
-errs3 <- compute_errs(m3, untrans_y=expsq)
-errs4 <- compute_errs(m4, untrans_y=expsq)
 
 ```
 
@@ -246,12 +162,20 @@ graph1 <- ggplot(data=dat,aes(x=dose1,y=log(blot),color=lab)) + geom_point() + g
 graph2 <- ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 2", y="log(blot)", title="Dose 2 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
 
 grid.arrange( graph1, graph2, ncol=2)
+# RANDOM SLOPE MODEL
+m1 <- lmer(log(blot) ~ proto + log(body) + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m2 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m3 <- lmer(log(blot) ~ proto*log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m4 <- lmer(log(blot)^0.5 ~ proto*log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m5 <- lmer(log(blot)^0.5 ~ proto*log(body) + (I(1/(dose1+1/2)) + I(1/(dose2+1/2)) + 1|lab), data=dat_train, REML=FALSE)
+
+
 ```
 
 \par
 
-```{r tab1, echo=FALSE}
-L1 <- format_lmer_list(L1)
+```{r, echo=FALSE}
+L1 <- format_lmer_list(lmer_list(m1))
 kable(L1[[1]])
 kable(L1[[2]])
 kable(L1[[3]], caption = "Summary Statistics of Initial Model")
@@ -259,24 +183,43 @@ kable(L1[[3]], caption = "Summary Statistics of Initial Model")
 
 
 
-```{r fig3, echo=FALSE, fig.height=10, fig.width=15}
-plot_lmer(m1, c(2,3))
+```{r, echo=FALSE, fig.height=10, fig.width=15}
+plot_lmer(m2, c(2,3))
 ```
 
-Among the problems in these plots is the nonlinearity in the Residuals vs. Predictor plot for dose1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) (we add a small number to dose because we cannot take the reciprocal of zero). We evaluate this transformed model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy, which we measure using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors. The results are in the following tables and figures:
+Among the problems in these plots is the nonlinearity in the Residuals vs. Predictor plot for dose1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) (we add a small number to dose because we cannot take the reciprocal of zero). We evaluate this transformed model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy, which we measure using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors.
 
 
-```{r tab2, echo=FALSE}
-L2 <- format_lmer_list(L2)
+```{r, fig.height=10, fig.width=15, echo=FALSE}
+L2 <- format_lmer_list(lmer_list(m4))
 kable(L2[[1]]); kable(L2[[2]]); kable(L2[[3]])
 
-```
+plot_lmer(m4, parmfrow = c(2,3))
 
-```{r fig4, fig.height=10, fig.width=15}
-plot_lmer(m2, parmfrow = c(2,3))
-```
+#root mean squared error penalizes more for extreme error
+rms_err <- function(actual, predicted){
+  error <- actual - predicted
+  return(sqrt(mean((error)^2)))
+}
+ 
+#absolute error weighs all error equally
+abs_err <- function(actual, predicted){
+  error <- actual - predicted
+  mean(abs(error))
+}
+ 
+compute_errs <- function(mod, test = dat_test){
+  preds <- exp(predict(mod, test))
+  absolute <- abs_err(test$blot, preds) %>% round(4)
+  rootmean <- rms_err(test$blot, preds) %>% round(4)
+  return(list(abs_err = absolute, rms_err = rootmean))
+}
 
-```{r tab3, echo=FALSE}
+errs1 <- compute_errs(m1)
+errs2 <- compute_errs(m2)
+errs3 <- compute_errs(m3)
+errs4 <- compute_errs(m4)
+
 tab <- t(data.frame(x=as.numeric(errs2),y=as.numeric(errs1)))
 colnames(tab) <- c("MAE","RMSE")
 rownames(tab) <- c("Transformed Dose 1", "Initial")
@@ -284,35 +227,64 @@ kable(tab)
 
 ```
 
-**comment comment comment**. Another problem with these residual plots is the slight arching in the Residuals vs. Fitted Values. To counteract this, we added a square root transformation to the response. **well then again we might not*** The results are below:
+**comment comment comment**. We still see problems with the diagnostic plots, including the non-randomness in the residals on the body weight predictor. To counteract this, we added interactions between the body weight and protocol, since the body weights are clustered by protocol. An anova test (p=0, chisq = 100)<!--($p$ = ` round(nova45[["Pr(>Chisq)"]][length(nova45[["Pr(>Chisq)"]])], 4)`, $\chi^2$=`dd round(nova45[["Chisq"]][length(nova45[["Chisq"]])], 4)`) --> confirmed that the interactions improve the model.
 
-
-```{r}
-L3 <- format_lmer_list(L3)
-kable(L3[[1]]); kable(L3[[2]]); kable(L3[[3]])
-
-plot_lmer(m3, parmfrow = c(2,3), expsq)
-
-tab <- t(data.frame(x=as.numeric(errs3),y=as.numeric(errs2)))
-colnames(tab) <- c("MAE","RMSE")
-rownames(tab) <- c("Transformed Response and Dose 1", "Transformed Dose 1")
-kable(tab)
-
-```
-
-This is our best-fitting mixed model we could fit. **maybe. it looks like sqrt log blot improves residual plot but worsens prediction**
+##m5 stuff
 
 ### Results
 
 #INCOMPLETE 
-The plot below samples random dose1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve. 
+The plot below samples random dose1 effects (slopes) and lab effects (intercepts) from the mixed model, holding all other predictors constant, and plots the resulting dose effect curve. 
 ```{r, echo=FALSE}
+nsim <- 1000
 
+reverse_trans <- function(dosetrans){
+  return(1/dosetrans - 1/2)
+}
 # randslopes <- rnorm(nsim, L3[[2]][2,1], sqrt(L3[[2]][2,2])) #%>% reverse_trans()
 # randinters <- rnorm(nsim, L3[[2]][1,1], sqrt(L3[[2]][1,2]))
 # randlines <- data.frame(a = randinters, b=randslopes, x=seq(-10, 10, length.out=nsim), y=seq(-10, 10, length.out = nsim))
 #ggplot(data=randlines, aes(x, y)) + geom_blank() + geom_abline(data=randlines, aes(intercept=a,slope=b), color="gray") + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"))
 
+simdose1curves <- function(mod, nsim = 1000){
+  
+  #simulated data
+  L <- lmer_list(mod)
+  MEANS <- c(L[["random"]]["(Intercept)", "mean"], L[["random"]][grep("dose1", rownames(L[["random"]])), "mean"])
+  
+  COR_full <- attr(VarCorr(mod)[[1]], "correlation")
+
+  dose1ind <- grep("dose1", rownames(COR_full))
+  interind <- grep("Inter", rownames(COR_full))
+  
+  COR <- COR_full[c(interind,dose1ind), c(interind,dose1ind)]
+  sdxy <- prod(attr(VarCorr(mod)[[1]], "stddev")[c(interind,dose1ind)])
+  #cov(x,y) = cor(x,y)*sd(x)sd(y)
+  COV <- COR * sdxy
+  sims <- rmvnorm(nsim, mean = MEANS, sigma = COV)
+  dose1sims <- sims[,2]
+  labsims <- sims[,1]
+  
+  #constant data
+  protoeffect <- 0 #just assume baseline protocol
+  dose2 <- 0 
+  dose2effect <- eval(parse(text = grep("dose2", rownames(L$random), value=T))) #in case dose2 needs to be transformed
+  fixedintereffect <- L$fixed["(Intercept)","mean"]
+  protoeffect <- 0 
+  body <- log(mean(dat_train$body))
+  bodyeffect <- log(body)*(L$fixed[grep("body", rownames(L$fixed)), "mean"])
+  
+  dose1 <- seq(0,10, 0.1)
+  dose1trans <- eval(parse(text = grep("dose1", rownames(L$random), value=T))) %>% rev()
+  dose1effect <- (apply(t(dose1trans), 2, '*', dose1sims))
+  
+  response <- exp(fixedintereffect + protoeffect + bodyeffect + dose2effect + labsims + dose1effect)
+
+  plot(c(0,0), xlim = c(min(dose1), max(dose1)), ylim = c(quantile(response, 0.01), quantile(response, 0.99)), xlab = "Dose 1", ylab="Blotted Uterus Weight", main = "Dose 1 Response Curve")
+  for(r in 1:nrow(response)){ #for each simulation...
+    lines(dose1, response[r,], col="gray")
+  }
+}
 simdose1curves(m4)
 ```
 
@@ -323,12 +295,9 @@ just plug in average values for everything else.
 -->
 
 ### Conclusion
-
 The variance in the dose1 effects by lab is noticeably high, so we say that the bioassay does depend on lab and thus this study fails miserably. 
-
-This explodes around 10 and it's only applicable for dose less than or equal to 10.
 
 ### Contributions
 
 Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. Nathanial implemented analysis for the univariate normal and multivariate normal approaches. Implementation and analysis of the mixed effects model was a joint effort by all members of the group. 
-
+>>>>>>> origin/master
