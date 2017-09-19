@@ -1,3 +1,4 @@
+
 ---
 title: "case1final"
 author: "Nathaniel Brown, Annie Tang, William Yang"
@@ -121,10 +122,6 @@ format_lmer_list <- function(L = NA){
   L <- lapply(L, round, 4)
   return(L)
 }
-# L <- format_lmer_list(lmer_list(m1.full))
-# kable(L[[1]])
-# kable(L[[2]])
-# kable(L[[3]])
 
 ```
 
@@ -166,8 +163,8 @@ graph2 <- ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + g
 grid.arrange( graph1, graph2, ncol=2)
 # RANDOM SLOPE MODEL
 m1 <- lmer(log(blot) ~ proto + log(body) + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
-m3 <- lmer(log(blot) ~ proto + (I(1/(dose1+0.5)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
-#m3 is a much better fit FYI. normal qq is actually a straight line!
+m2 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m3 <- lmer(log(blot) ~ proto*log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 # anova to show addition of log(body) is significant 
 nova <- anova(m3, m4)
@@ -304,4 +301,3 @@ Because the dose 1 effect has such a high variance relative to the mean, our mod
 ### Contributions
 
 Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. Nathanial implemented analysis for the univariate normal and multivariate normal approaches. Implementation and analysis of the mixed effects model was a joint effort by all members of the group. 
-
