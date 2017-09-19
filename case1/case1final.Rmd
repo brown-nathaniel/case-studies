@@ -30,7 +30,9 @@ dat_test <- dat[testrows,]
 
 ### Introduction
 
-  The purpose of this project is to analyze rat bioassays. is there variation in results between labs? there shouldn't be. Here are a few plots showing the four protocols and other important things.
+  In this report, we analyze data from an international validation study to measure the effectiveness of the rat uterotrophic bioassay. The bioassay being studied attempts to measure the estrogenic effect of certain chemicals. The two chemicals used in this study have well known effects, so we would like to verify that the bioassay produces consistent results in rats that have been administered various dosages of the chemicals across two possible protocols. If the uterotrophic bioassay is an effective procedure for measuring the effects of these chemicals, then we expect to see consistent responses to various dosages across all labs and groupings.
+
+  To measure the consistency of the responses, we fit iterations of a linear mixed effects model on the provided dataset. The model is conditioned on the labs to account for lab-to-lab variability. Each iteration of the model differs slightly in transformations and conditioning of the predictors/responses until we arrive at a model that we deem most appropriate for the dataset. We then evaluate the final model to determine whether it predicts large variation in responses to the dosages between labs, or if it predicts a consistent measured response to the chemicals.
 
 ### Model-Fitting
 
