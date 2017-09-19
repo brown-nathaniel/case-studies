@@ -3,9 +3,9 @@ title: "case1final"
 author: "Nathaniel Brown, Annie Tang, William Yang"
 date: "September 13, 2017"
 output:
-  pdf_document: default
   html_document: default
   fig_caption: yes
+  pdf_document: default
 ---
 
 
@@ -81,9 +81,9 @@ plot_lmer <- function(mod, parmfrow = NA){
   )
   for(c in 1:ncol(X)){
     if(grepl("proto", continuouseffects[c])){
-      plot(X[,c][X[,c] > 0], resids[X[,c] > 0], main = "Residuals vs. Predictor" , xlab = continuouseffects[c])
+      plot(X[,c][X[,c] > 0], resids[X[,c] > 0], main = "Residuals vs. Predictor" , xlab = continuouseffects[c], ylab = "Residuals")
     }else{
-      plot(X[,c], resids, main = "Residuals vs. Predictor" , xlab = continuouseffects[c])
+      plot(X[,c], resids, main = "Residuals vs. Predictor" , xlab = continuouseffects[c], ylab= "Residuals")
     }
   }
   par(mfrow=c(1,1))
@@ -166,27 +166,28 @@ grid.arrange( graph1, graph2, ncol=2)
 m1 <- lmer(log(blot) ~ proto + log(body) + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
 m2 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 m3 <- lmer(log(blot) ~ proto*log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
-m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
-# anova to show addition of log(body) is significant 
-nova <- anova(m3, m4)
+m4 <- lmer(log(blot)^0.5 ~ proto*log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m5 <- lmer(log(blot)^0.5 ~ proto*log(body) + (I(1/(dose1+1/2)) + I(1/(dose2+1/2)) + 1|lab), data=dat_train, REML=FALSE)
+
+
 ```
 
 \par
 
 ```{r, echo=FALSE}
-L <- format_lmer_list(lmer_list(m1))
-kable(L[[1]])
-kable(L[[2]])
-kable(L[[3]], caption = "Summary Statistics of Initial Model")
+L1 <- format_lmer_list(lmer_list(m1))
+kable(L1[[1]])
+kable(L1[[2]])
+kable(L1[[3]], caption = "Summary Statistics of Initial Model")
 ```
 
-The diagnostic plots to assess model fit are below:
+
 
 ```{r, echo=FALSE, fig.height=10, fig.width=15}
-plot_lmer(m1, c(2,3))
+plot_lmer(m2, c(2,3))
 ```
 
-Among the problems in these plots is the nonlinearity in the Residuals vs. Predictor plot for dose1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) (we add a small number to dose because we cannot take the reciprocal of zero). and added body weight as a predictor in order to have the best fitting model. We evaluate this model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy, which we evaluate using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors.
+Among the problems in these plots is the nonlinearity in the Residuals vs. Predictor plot for dose1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) (we add a small number to dose because we cannot take the reciprocal of zero). We evaluate this transformed model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy, which we measure using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors.
 
 
 ```{r, fig.height=10, fig.width=15, echo=FALSE}
@@ -214,28 +215,26 @@ compute_errs <- function(mod, test = dat_test){
   return(list(abs_err = absolute, rms_err = rootmean))
 }
 
-random_dose_errs <- compute_errs(m4)
-fixed_dose_errs <- compute_errs(m1)
+errs1 <- compute_errs(m1)
+errs2 <- compute_errs(m2)
+errs3 <- compute_errs(m3)
+errs4 <- compute_errs(m4)
 
-tab <- t(data.frame(x=as.numeric(random_dose_errs),y=as.numeric(fixed_dose_errs)))
+tab <- t(data.frame(x=as.numeric(errs2),y=as.numeric(errs1)))
 colnames(tab) <- c("MAE","RMSE")
-rownames(tab) <- c("Random Dose + Transformations", "Fixed Dose")
+rownames(tab) <- c("Transformed Dose 1", "Initial")
 kable(tab)
-
-m5 <- lmer(log(blot) ~ proto * log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
-nova5 <- anova(m4, m5)
-
 
 ```
 
-We see that the variability due to sources other than the random effects is 0.0797 (decreased from 0.193). Also, the diagnostic plots improved, although it is notable that the residual variance decreases for larger fitted values. The fixed dose model is also much worse at predicting than the random dose model with transformations. We still see problems with this model, including the non-randomness in the body weight residuals. To counteract this, we added interactions between log body weight and protocol, and an anova test ($p$ = `r round(nova5[["Pr(>Chisq)"]][length(nova[["Pr(>Chisq)"]])], 4)`, $\chi^2$=`r round(nova[["Chisq"]][length(nova[["Chisq"]])], 4)`) confirmed that the interactions improve the model.
+**comment comment comment**. We still see problems with the diagnostic plots, including the non-randomness in the residals on the body weight predictor. To counteract this, we added interactions between the body weight and protocol, since the body weights are clustered by protocol. An anova test (p=0, chisq = 100)<!--($p$ = ` round(nova45[["Pr(>Chisq)"]][length(nova45[["Pr(>Chisq)"]])], 4)`, $\chi^2$=`dd round(nova45[["Chisq"]][length(nova45[["Chisq"]])], 4)`) --> confirmed that the interactions improve the model.
 
 ##m5 stuff
 
-### Lab Variation
+### Results
 
 #INCOMPLETE 
-The plot below samples random dose1 effects (slopes) and lab effects (intercepts) from the mixed model, holding all other predictors constant, and plots the results. The variance in the dose1 effects by lab is noticeably high, so we say that the bioassay does depend on lab and thus this study fails miserably. 
+The plot below samples random dose1 effects (slopes) and lab effects (intercepts) from the mixed model, holding all other predictors constant, and plots the resulting dose effect curve. 
 ```{r, echo=FALSE}
 nsim <- 1000
 
@@ -276,17 +275,17 @@ simdose1curves <- function(mod, nsim = 1000){
   bodyeffect <- log(body)*(L$fixed[grep("body", rownames(L$fixed)), "mean"])
   
   dose1 <- seq(0,10, 0.1)
-  dose1trans <- eval(parse(text = grep("dose1", rownames(L$random), value=T)))
+  dose1trans <- eval(parse(text = grep("dose1", rownames(L$random), value=T))) %>% rev()
   dose1effect <- (apply(t(dose1trans), 2, '*', dose1sims))
   
   response <- exp(fixedintereffect + protoeffect + bodyeffect + dose2effect + labsims + dose1effect)
 
-  plot(c(0,0), xlim = c(min(dose1), max(dose1)), ylim = c(quantile(response, 0.01), quantile(response, 0.99)))
+  plot(c(0,0), xlim = c(min(dose1), max(dose1)), ylim = c(quantile(response, 0.01), quantile(response, 0.99)), xlab = "Dose 1", ylab="Blotted Uterus Weight", main = "Dose 1 Response Curve")
   for(r in 1:nrow(response)){ #for each simulation...
-    lines(dose1, response[r,])
+    lines(dose1, response[r,], col="gray")
   }
 }
-simdose1curves(m5)
+simdose1curves(m4)
 ```
 
 <!--
@@ -296,8 +295,7 @@ just plug in average values for everything else.
 -->
 
 ### Conclusion
-
-Because the dose 1 effect has such a high variance relative to the mean, our model shows that the bioassay being studied does not measure a consistent response to dosage across labs.
+The variance in the dose1 effects by lab is noticeably high, so we say that the bioassay does depend on lab and thus this study fails miserably. 
 
 ### Contributions
 
