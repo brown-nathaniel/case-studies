@@ -3,9 +3,9 @@ title: "case1final"
 author: "Nathaniel Brown, Annie Tang, William Yang"
 date: "September 13, 2017"
 output:
-  pdf_document: default
   html_document: default
   fig_caption: yes
+  pdf_document: default
 ---
 
 
@@ -49,7 +49,7 @@ We start at a reduced form of this model and augment it to its full form after i
 
 ```{r fxns}
 expsq <- function(x){
-  exp(x)^2
+  exp(x^2)
 }
 plot_lmer <- function(mod, parmfrow = NA, untrans_y = exp){
   if(mean(is.na(parmfrow) > 0)){
@@ -119,7 +119,7 @@ lmer_list <- function(mod){
   # randeffmeans_all <- getME(mod, "theta")
   # numdots <- sapply(names(randeffmeans_all), gregexpr, pattern="." , fixed=TRUE) %>% sapply(length)
   # randeffmeans <- randeffmeans_all[which((numdots) == 1)]
-  randeffmeans <- ranef(m4)[["lab"]] %>% apply(2,mean)
+  randeffmeans <- ranef(mod)[["lab"]] %>% apply(2,mean)
   randeffvar <- diag(summary(mod)[["varcor"]][["lab"]])
   residsd <- sigma(mod)
   
@@ -174,7 +174,7 @@ simdose1curves <- function(mod, nsim = 1000, untrans_y = exp){
   bodyeffect <- log(body)*(L$fixed[grep("body", rownames(L$fixed)), "mean"])
   
   dose1 <- seq(0,10, 0.1)
-  dose1trans <- eval(parse(text = grep("dose1", rownames(L$random), value=T))) %>% rev()
+  dose1trans <- eval(parse(text = grep("dose1", rownames(L$random), value=T)))
   dose1effect <- (apply(t(dose1trans), 2, '*', dose1sims))
   
   response <- untrans_y(fixedintereffect + protoeffect + bodyeffect + dose2effect + labsims + dose1effect)
