@@ -3,15 +3,16 @@ title: "case1final"
 author: "Nathaniel Brown, Annie Tang, William Yang"
 date: "September 13, 2017"
 output:
-  html_document: default
   pdf_document: default
+  html_document: default
+  fig_caption: yes
 ---
 
 
 ```{r setup, include=FALSE, echo=FALSE}
 set.seed(440)
 knitr::opts_chunk$set(echo = TRUE)
-library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan); library(lme4); library(mvtnorm)
+library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan); library(lme4); library(mvtnorm); library(gridExtra)
 ```
 
 
@@ -35,20 +36,22 @@ dat_test <- dat[testrows,]
 $$
 y_{ij} \sim \beta_{0,i} + \beta_{1,i}x_{ij,d_1} + \beta_{2,i}x_{ij,d_2} + \beta_{3,i}x_{ij,p_B} + \beta_{4,i}x_{ij,p_C} + \beta_{5,i}x_{ij,p_D} + \beta_{6,i}x_{ij,log(w)} + \epsilon
 \\
-\beta_{0:6,i} \sim N(\mu_{0:6,i}, \sigma^2_{0:6,i})
+\beta_{0:5,i} \sim N(\mu_{0:5,i}, \sigma^2_{0:5,i})
 \\
 \epsilon \sim N(0, \sigma^2)
 $$
 
-Let $y_{ij}$ be the observation for log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose1 and dose2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables for which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for lab-to-lab variability in the intercepts and slopes on the blotted weight for the different dosages and protocols.
+To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose1 and dose2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. Body weight and uterus weight are log-transformed to account for the right skew in the data (Figure 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Figure 2). The summary statistics of the model described above can be found on Table 1.
 
 We start at a reduced form of this model and augment it to its full form after initial analyses.
 
-```{r, echo=FALSE}
+```{r plot_lmer, echo=FALSE}
 plot_lmer <- function(mod, parmfrow = NA){
-  
-  par(mfrow = parmfrow)
-
+  if(mean(is.na(parmfrow) > 0)){
+    par(mfrow = c(1,1))
+  }else{
+    par(mfrow = parmfrow)
+  }
   fitvals <- exp(predict(mod, dat_train))
   resids <- summary(mod)[["residuals"]]
 
@@ -86,17 +89,8 @@ plot_lmer <- function(mod, parmfrow = NA){
 
 ```
 
+```{r lmer_list, echo=FALSE}
 
-```{r, echo=FALSE}
-# RANDOM INTERCEPT MODEL
-m1.reduced <- lmer(log(blot) ~ dose1 + dose2 + (1|lab), data=dat_train, REML = FALSE)
-m1.full <- lmer(log(blot) ~ dose1 + dose2 + proto + (1|lab), data=dat_train, REML = FALSE)
-nova <- anova(m1.reduced, m1.full)
-```
-
-In our analysis, we choose to add a random effect for the lab variable, in order to account for lab-to-lab heterogeneity. Essentially, this allows us to avoid violating an independence assumption by assuming a different baseline response for each lab. First, we model these differences between individual labs by assuming random intercepts for each lab. We first include only dose1 and dose2 as fixed effects, then introduce proto as a fixed effect after confirming through anova ($p$ < 2.2e-16, $\chi^2$=`r round(nova[["Chisq"]][length(nova[["Chisq"]])], 4)`) that it is a significant predictor. The summary statistics of this model are shows in the table below:
-
-```{r, echo = FALSE}
 lmer_list <- function(mod){
   
   fixeffmeans <- summary(mod)[["coefficients"]][,1]
@@ -127,31 +121,51 @@ format_lmer_list <- function(L = NA){
   L <- lapply(L, round, 4)
   return(L)
 }
-L <- format_lmer_list(lmer_list(m1.full))
-kable(L[[1]])
-kable(L[[2]])
-kable(L[[3]])
+# L <- format_lmer_list(lmer_list(m1.full))
+# kable(L[[1]])
+# kable(L[[2]])
+# kable(L[[3]])
+
 ```
 
+\par
 
-With this full model, we see that the variability due to lab is 0.028 (in terms of variance), and variability due to non-lab sources is 0.193. And when we take a look at the fixed effects, we see that an increase in the amount of dose1 corresponds to an increase (0.142 units) in the response variable, log(blot). Furthermore, an increase in the amount of dose2 corresponds to a decrease (-0.519 units) in the response variable. Protocols B, C, and D all lead to an increase in the response variable, relative to protocol A. The diagnostic plots below show that this model fits better than the previous two. Although the residual variance decreases as the fitted values increase, the quantiles of the residuals are approximately normal.
+```{r, echo=FALSE, fig1, fig.cap="Log Transformations of Weights", fig.height=5, fig.width=15}
+labweights <- dat[,c("body", "blot", "lab")]
+labweights_long <- melt(labweights, id="lab")
+g1 <- ggplot(data = labweights_long,
+       mapping = aes(x=lab, y=value, color = variable)) +
+  geom_boxplot() + 
+  labs(title = "Weight by Lab",
+       x = "Lab",
+       y = "Weight",
+       color = "Weighed Object") +
+  theme(axis.text.x = element_text(angle = 90, hjust=1),
+        plot.title = element_text(hjust = 0.5))
 
-```{r fig.width=15, fig.height=10, echo=FALSE}
+g2 <- ggplot(data = labweights_long,
+       mapping = aes(x=lab, y=log(value), color = variable)) + 
+  geom_boxplot() + 
+  labs(title = "log(Weight) by Lab",
+       x = "Lab",
+       y = "log(Weight)",
+       color = "Weighed Object") +
+  theme(axis.text.x = element_text(angle = 90, hjust=1),
+        plot.title = element_text(hjust = 0.5))
+grid.arrange( g1, g2, ncol=2)
 
-plot_lmer(m1.full, parmfrow=c(2,3))
 ```
 
+\par
 
-In this random intercept model, we account for baseline differences between labs, but we also assume that the effects of doses is the same for each lab. After plotting the log(blot) versus dose by lab, we see that this is not a valid assumption to make since the lines are clearly not parallel. So we introduce a random slope model. Now, dose1 and dose2 can have varying slopes.
+```{r, fig2, fig.cap="Lab-to-Lab Variability in Intercepts and Slopes", echo=FALSE, fig.height=5, fig.width=15, warning=FALSE}
 
+graph1 <- ggplot(data=dat,aes(x=dose1,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 1", y="log(blot)", title="Dose 1 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
+graph2 <- ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 2", y="log(blot)", title="Dose 2 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
 
-```{r, echo=FALSE}
-
-ggplot(data=dat,aes(x=dose1,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 1", y="log(blot)", title="Dose 1 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
-ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 2", y="log(blot)", title="Dose 2 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
-
+grid.arrange( graph1, graph2, ncol=2)
 # RANDOM SLOPE MODEL
-m2 <- lmer(log(blot) ~ proto + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m1 <- lmer(log(blot) ~ proto + log(body) + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
 m3 <- lmer(log(blot) ~ proto + (I(1/(dose1+0.5)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 #m3 is a much better fit FYI. normal qq is actually a straight line!
 m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
@@ -159,7 +173,22 @@ m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), d
 nova <- anova(m3, m4)
 ```
 
-After adding the random slopes, we transformed dose 1 by the reciprocal of (dose1 + 1/2) (we add a small number to dose because we cannot take the reciprocal of zero) and added body weight as a predictor in order to have the best fitting model. We evaluate this model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy, which we evaluate using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors.
+\par
+
+```{r, echo=FALSE}
+L <- format_lmer_list(lmer_list(m1))
+kable(L[[1]])
+kable(L[[2]])
+kable(L[[3]], caption = "Summary Statistics of Initial Model")
+```
+
+The diagnostic plots to assess model fit are below:
+
+```{r, echo=FALSE, fig.height=10, fig.width=15}
+plot_lmer(m1, c(2,3))
+```
+
+Among the problems in these plots is the nonlinearity in the Residuals vs. Predictor plot for dose1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) (we add a small number to dose because we cannot take the reciprocal of zero). and added body weight as a predictor in order to have the best fitting model. We evaluate this model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy, which we evaluate using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors.
 
 
 ```{r, fig.height=10, fig.width=15, echo=FALSE}
@@ -188,7 +217,7 @@ compute_errs <- function(mod, test = dat_test){
 }
 
 random_dose_errs <- compute_errs(m4)
-fixed_dose_errs <- compute_errs(m1.full)
+fixed_dose_errs <- compute_errs(m1)
 
 tab <- t(data.frame(x=as.numeric(random_dose_errs),y=as.numeric(fixed_dose_errs)))
 colnames(tab) <- c("MAE","RMSE")
