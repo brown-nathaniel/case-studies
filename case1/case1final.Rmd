@@ -1,4 +1,3 @@
-
 ---
 title: "case1final"
 author: "Nathaniel Brown, Annie Tang, William Yang"
@@ -30,7 +29,9 @@ dat_test <- dat[testrows,]
 
 ### Introduction
 
-  The purpose of this project is to analyze rat bioassays. is there variation in results between labs? there shouldn't be. Here are a few plots showing the four protocols and other important things.
+  In this report, we analyze data from an international validation study to measure the effectiveness of the rat uterotrophic bioassay. The bioassay being studied attempts to measure the estrogenic effect of certain chemicals. The two chemicals used in this study have well known effects, so we would like to verify that the bioassay produces consistent results in rats that have been administered various dosages of the chemicals across two possible protocols. If the uterotrophic bioassay is an effective procedure for measuring the effects of these chemicals, then we expect to see consistent responses to various dosages across all labs and groupings.
+
+  To measure the consistency of the responses, we fit iterations of a linear mixed effects model on the provided dataset. The model is conditioned on the labs to account for lab-to-lab variability. Each iteration of the model differs slightly in transformations and conditioning of the predictors/responses until we arrive at a model that we deem most appropriate for the dataset. We then evaluate the final model to determine whether it predicts large variation in responses to the dosages between labs, or if it predicts a consistent measured response to the chemicals.
 
 ### Model-Fitting
 
@@ -165,7 +166,7 @@ grid.arrange( graph1, graph2, ncol=2)
 m1 <- lmer(log(blot) ~ proto + log(body) + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
 m2 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 m3 <- lmer(log(blot) ~ proto*log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
-m4 <- lmer(log(blot)^0.5 ~ proto*log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 # anova to show addition of log(body) is significant 
 nova <- anova(m3, m4)
 ```
@@ -301,3 +302,4 @@ Because the dose 1 effect has such a high variance relative to the mean, our mod
 ### Contributions
 
 Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. Nathanial implemented analysis for the univariate normal and multivariate normal approaches. Implementation and analysis of the mixed effects model was a joint effort by all members of the group. 
+>>>>>>> origin/master
