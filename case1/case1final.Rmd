@@ -165,7 +165,7 @@ grid.arrange( graph1, graph2, ncol=2)
 m1 <- lmer(log(blot) ~ proto + log(body) + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
 m2 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 m3 <- lmer(log(blot) ~ proto*log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
-m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m4 <- lmer(log(blot)^0.5 ~ proto*log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 # anova to show addition of log(body) is significant 
 nova <- anova(m3, m4)
 ```
