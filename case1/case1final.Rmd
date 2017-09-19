@@ -10,13 +10,13 @@ output:
 
 
 ```{r setup, include=FALSE, echo=FALSE}
-set.seed(40)
-knitr::opts_chunk$set(echo = TRUE)
+set.seed(440)
+knitr::opts_chunk$set(echo = FALSE)
 library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan); library(lme4); library(mvtnorm); library(gridExtra)
 ```
 
 
-```{r, warning=FALSE, echo=FALSE}
+```{r, warning=FALSE}
 dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
 dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
 
@@ -47,7 +47,7 @@ To fit the data, we used a mixed model, with fixed and random effects. Let $y_{i
 
 We start at a reduced form of this model and augment it to its full form after initial analyses.
 
-```{r fxns, echo=FALSE}
+```{r fxns}
 expsq <- function(x){
   exp(x)^2
 }
@@ -116,10 +116,10 @@ lmer_list <- function(mod){
   
   fixeffmeans <- summary(mod)[["coefficients"]][,1]
   fixeffsd <- summary(mod)[["coefficients"]][,2]
-  randeffmeans_all <- getME(mod, "theta")
-  numdots <- sapply(names(randeffmeans_all), gregexpr, pattern="." , fixed=TRUE) %>% sapply(length)
-  randeffmeans <- randeffmeans_all[which((numdots) == 1)]
-  #randeffmeans <- ranef(m4)[["lab"]] %>% apply(2,mean)
+  # randeffmeans_all <- getME(mod, "theta")
+  # numdots <- sapply(names(randeffmeans_all), gregexpr, pattern="." , fixed=TRUE) %>% sapply(length)
+  # randeffmeans <- randeffmeans_all[which((numdots) == 1)]
+  randeffmeans <- ranef(m4)[["lab"]] %>% apply(2,mean)
   randeffvar <- diag(summary(mod)[["varcor"]][["lab"]])
   residsd <- sigma(mod)
   
@@ -188,7 +188,7 @@ simdose1curves <- function(mod, nsim = 1000, untrans_y = exp){
 ```
 
 
-```{r models}
+```{r models, echo=FALSE}
 # RANDOM SLOPE MODEL
 m1 <- lmer(log(blot) ~ proto + log(body) + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
 
@@ -196,7 +196,7 @@ m2 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), d
 
 m3 <- lmer(sqrt(log(blot)) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 
-m4 <- lmer((log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 
 L1 <- lmer_list(m1)
 L2 <- lmer_list(m2)
@@ -272,7 +272,7 @@ kable(L2[[1]]); kable(L2[[2]]); kable(L2[[3]])
 
 ```
 
-```{r fig4, fig.height=10, fig.width=15}
+```{r fig4, fig.height=10, fig.width=15, echo=FALSE}
 plot_lmer(m2, parmfrow = c(2,3))
 ```
 
@@ -287,7 +287,7 @@ kable(tab)
 **comment comment comment**. Another problem with these residual plots is the slight arching in the Residuals vs. Fitted Values. To counteract this, we added a square root transformation to the response. **well then again we might not*** The results are below:
 
 
-```{r}
+```{r, echo=FALSE}
 L3 <- format_lmer_list(L3)
 kable(L3[[1]]); kable(L3[[2]]); kable(L3[[3]])
 
@@ -308,12 +308,8 @@ This is our best-fitting mixed model we could fit. **maybe. it looks like sqrt l
 The plot below samples random dose1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve. 
 ```{r, echo=FALSE}
 
-# randslopes <- rnorm(nsim, L3[[2]][2,1], sqrt(L3[[2]][2,2])) #%>% reverse_trans()
-# randinters <- rnorm(nsim, L3[[2]][1,1], sqrt(L3[[2]][1,2]))
-# randlines <- data.frame(a = randinters, b=randslopes, x=seq(-10, 10, length.out=nsim), y=seq(-10, 10, length.out = nsim))
-#ggplot(data=randlines, aes(x, y)) + geom_blank() + geom_abline(data=randlines, aes(intercept=a,slope=b), color="gray") + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"))
-
 simdose1curves(m4)
+
 ```
 
 <!--
