@@ -205,7 +205,7 @@ simdose1curves <- function(mod, nsim = 1000, untrans_y = exp, lab = NA, showorig
   
   response <- matrix(untrans_y(fixedintereffect + protoeffect + bodyeffect + dose2effect + labsims + dose1effect), nrow = nsim)
 
-  par(cex = 2)
+  par(cex = 2.5)
   plot(0,0, type="n", xlim = c(min(dose1), max(dose1)), ylim = c(0,500), xlab = "Dose 1", ylab="Blotted Uterus Weight", main = paste("Dose 1 Response Curve for", lab, "Lab"))
   for(r in 2:nsim){ #for each simulation...
     lines(dose1, response[r,], col=rgb(.9,.9,.9))
