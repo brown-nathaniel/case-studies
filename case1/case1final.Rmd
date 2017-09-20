@@ -53,7 +53,7 @@ $$
 
 
 
-To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose1 and dose2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. Body weight and uterus weight are log-transformed to account for the right skew in the data (Fig. 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Fig. 2). The summary statistics of the model described above can be found on Table 1.
+To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose1 and dose2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. Body weight and uterus weight are log-transformed to account for the right skew in the data (Fig. 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Fig. 2). The summary statistics of the model described above can be found in Tables 1-4, and diagnostic plots using the residuals can be found in Figure 3. The results of the random effects that were cut off from Table 2 can be found in the Appendix.
 
 We start at a reduced form of this model and augment it to its full form after initial analyses.
 
@@ -159,7 +159,7 @@ format_lmer_list <- function(L = NA){
   randmeanslong <- L$randommeans
   randmeansshort <- randmeanslong[,1:3]
   randmeansshort <- cbind(randmeansshort, "...")
-  randmeansshort <- cbind(randmeansshort, randmeanslong[,ncol(randmeanslong) - (1:3)])
+  randmeansshort <- cbind(randmeansshort, randmeanslong[,ncol(randmeanslong) - (2:0)])
   
   L$randommeans <- randmeansshort
   
@@ -205,7 +205,6 @@ simdose1curves <- function(mod, nsim = 1000, untrans_y = exp, lab = NA, showorig
   
   response <- matrix(untrans_y(fixedintereffect + protoeffect + bodyeffect + dose2effect + labsims + dose1effect), nrow = nsim)
 
-  par(cex = 2.5)
   plot(0,0, type="n", xlim = c(min(dose1), max(dose1)), ylim = c(0,500), xlab = "Dose 1", ylab="Blotted Uterus Weight", main = paste("Dose 1 Response Curve for", lab, "Lab"))
   for(r in 2:nsim){ #for each simulation...
     lines(dose1, response[r,], col=rgb(.9,.9,.9))
@@ -226,21 +225,17 @@ m2 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), d
 
 m3 <- lmer(sqrt(log(blot)) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 
-m4 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
-
 L1 <- lmer_list(m1)
 L2 <- lmer_list(m2)
 L3 <- lmer_list(m3)
-L4 <- lmer_list(m4)
 
 errs1 <- compute_errs(m1)
 errs2 <- compute_errs(m2)
 errs3 <- compute_errs(m3, untrans_y=expsq)
-errs4 <- compute_errs(m4, untrans_y=expsq)
 
 ```
 
-```{r, echo=FALSE, fig1, fig.cap="Log Transformations of Weights", fig.height=5, fig.width=15}
+```{r fig1, fig.height=5, fig.width=15}
 labweights <- dat[,c("body", "blot", "lab")]
 labweights_long <- melt(labweights, id="lab")
 g1 <- ggplot(data = labweights_long,
@@ -266,7 +261,12 @@ grid.arrange( g1, g2, ncol=2)
 
 ```
 
-```{r, fig2, fig.cap="Lab-to-Lab Variability in Intercepts and Slopes", echo=FALSE, fig.height=5, fig.width=15, warning=FALSE}
+$$
+\text{Figure 1: Log Transformations of Weights}
+$$
+
+
+```{r fig2, fig.height=5, fig.width=15, warning=FALSE}
 
 graph1 <- ggplot(data=dat,aes(x=dose1,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 1", y="log(blot)", title="Dose 1 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
 graph2 <- ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 2", y="log(blot)", title="Dose 2 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
@@ -274,82 +274,121 @@ graph2 <- ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + g
 grid.arrange( graph1, graph2, ncol=2)
 ```
 
+$$
+\text{Figure 2: Lab-to-Lab Variability in Intercepts and Slopes}
+$$
+
+$$
+\text{Tables 1-4: Summary Statistics of Initial Model}
+$$
+
 ```{r tab1}
 L1 <- format_lmer_list(L1)
-kable(L1[[1]], caption = "Summary Statistics of Initial Model")
+kable(L1[[1]])
 kable(L1[[2]])
 kable(L1[[3]])
 kable(L1[[4]])
 ```
 
-```{r fig3, echo=FALSE, fig.height=10, fig.width=15, fig.cap="Diagnostic Plots of Initial Model"}
+```{r fig3, echo=FALSE, fig.height=5, fig.width=8}
+par(cex = 2)
 plot_lmer(m1, c(2,3))
 ```
 
-Among the problems in these plots is the nonlinearity in the Residuals vs. Predictor plot for dose1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) (we add a small number to dose because we cannot take the reciprocal of zero). We evaluate this transformed model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy, which we measure using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors. The results are in the following tables and figures:
+$$
+\text{Figure 3: Diagnostic Plots of Initial Model}
+$$
 
+Among the problems in these plots is the nonlinearity in the Residuals vs. Predictor plot for dose1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) (we add a small number to dose because we cannot take the reciprocal of zero). We evaluate this transformed model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy on a single hold-out sample, which we measure using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors. The results are in the following tables and figures:
+
+$$
+\text{Tables 5-8: Summary Statistics of Transformed Dose Model}
+$$
 
 ```{r tab2}
 L2 <- format_lmer_list(L2)
-kable(L2[[1]], caption = "Summary Statistics of Transformed Dose 1")
+kable(L2[[1]])
 kable(L2[[2]])
 kable(L2[[3]])
 kable(L2[[4]])
 ```
 
-```{r fig4, fig.height=10, fig.width=15, fig.cap="Diagnostic Plots of Model with Transformed Dose 1"}
+```{r fig4, fig.height=5, fig.width=8}
+par(cex = 2)
 plot_lmer(m2, parmfrow = c(2,3))
 ```
+
+$$
+\text{Figure 4: Diagnostic Plots of Model with Transformed Dose 1}
+$$
+
+
+$$
+\text{Table 9: Predictive Error of First Two Models}
+$$
+
 
 ```{r tab3}
 errtab <- t(data.frame(x=as.numeric(errs1),y=as.numeric(errs2), z=as.numeric(errs3)))
 colnames(errtab) <- c("MAE","RMSE")
 rownames(errtab) <- c("Initial", "Reciprocal Dose 1", "Transformed Dose 1 and Uterus Weight")
-kable(errtab[-3,], caption = "Predictive Error of First Two Models")
+kable(errtab[-3,])
 
 ```
 
 Another problem with these residual plots is the slight arching in the Residuals vs. Fitted Values. To counteract this, we added a square root transformation to the response. The model summary statistics, diagnostic plots, and predictive accuracy are below:
 
+$$
+\text{Tables 10-13: Summary Statistics of Transformed Dose and Transformed Uterus Weight Model}
+$$
 
 ```{r tab4}
 L3 <- format_lmer_list(L3)
-kable(L3[[1]], caption = "")
+kable(L3[[1]])
 kable(L3[[2]])
 kable(L3[[3]])
 kable(L3[[4]])
 ```
 
-```{r fig5, fig.cap="Diagnostic Plots of Model with Transformed Dose 1 and Blotted Uterus Weight"}
+```{r fig5, fig.height=5, fig.width=8}
+par(cex = 0.5)
 plot_lmer(m3, parmfrow = c(2,3), expsq)
 ```
 
+$$
+\text{Figure 5: Diagnostic Plots of Model with Transformed Dose 1 and Blotted Uterus Weight}
+$$
+
+
+$$
+\text{Table 14: Predictive Error of All Models}
+$$
+
 ```{r tab5}
-kable(errtab, caption = "Predictive Error of All Models")
+kable(errtab)
 ```
 
-Based on the residual plots, this mixed model best satisfies the assumptions of linear regression. However, we note that taking the square root of log(blot) improves the residual plot at the cost of slightly lower predictive accuracy.
+Based on the residual plots, this mixed model best satisfies the assumptions of linear regression. However, we note that taking the square root of log(blot) improves the residual plot at the cost of slightly lower predictive accuracy on the hold-out sample dataset.
 
 ### Results
 
 The plot below samples random dose1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve. The black curves plot the means of the random effects from the model output. 
 
-```{r fig6, fig.height=51, fig.width=30, fig.cap="Dose 1 Response Curves for Each Lab"}
+```{r fig6, fig.height=70, fig.width=45}
 
-par(mfrow = c(7,3))
-for(eachlab in unique(dat$lab)){
+par(mfrow = c(7,3), cex=3)
+for(eachlab in sort(unique(dat$lab))){
   simdose1curves(m3, 100, expsq, eachlab)
 }
 par(mfrow = c(1,1))
 ```
 
-Although the dose effect curves of each lab mostly trend positive, the variance in the dose1 effects by lab is higher than we would like. The distance between the lowest range and highest range of dose effect curves is large enough that we would be skeptical of how close any observed dose effect curve would be to the true effect of a chemical. Therefore, we do not recommend this bioassay procedure as a reliable method for consistently measuring the estrogenic effects of chemicals in rats. 
+$$
+\text{Figure 6: Dose 1 Response Curves for Each Lab}
+$$
 
-<!--
-account for correlation using multivariate normal.
-use 2 dimensional mvnorm for slope and intercept.
-just plug in average values for everything else.
--->
+
+Although the dose effect curves of each lab mostly trend positive, the variance in the dose1 effects by lab is higher than we would like. The distance between the lowest range and highest range of dose effect curves is large enough that we would be skeptical of how close any observed dose effect curve would be to the true effect of a chemical. Therefore, we do not recommend this bioassay procedure as a reliable method for consistently measuring the estrogenic effects of chemicals in rats. 
 
 ### Discussion
 
@@ -357,4 +396,33 @@ While our model seems to mostly satisfy the assumptions for regression, the cent
 
 ### Contributions
 
-Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. Nathanial implemented analysis for the univariate normal and multivariate normal approaches. Implementation and analysis of the mixed effects model was a joint effort by all members of the group. 
+Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. Implementation and analysis of the mixed effects model was a joint effort by all members of the group. 
+
+### Appendix
+
+##### Complete Results of Random Means for Each Model:
+
+$$
+\text{Table 2}
+$$
+
+```{r}
+kable(t(round(lmer_list(m1)[[2]], 4)))
+```
+
+$$
+\text{Table 6}
+$$
+
+```{r}
+kable(t(round(lmer_list(m2)[[2]], 4)))
+```
+
+
+$$
+\text{Table 11}
+$$
+
+```{r}
+kable(t(round(lmer_list(m3)[[2]], 4)))
+```
