@@ -29,13 +29,15 @@ dat_test <- dat[testrows,]
 
 ### Introduction
 
-  In this report, we analyze data from an international validation study to measure the effectiveness of the rat uterotrophic bioassay. The bioassay being studied attempts to measure the estrogenic effect of certain chemicals. The two chemicals used in this study have well known effects, so we would like to verify that the bioassay produces consistent results in rats that have been administered various dosages of the chemicals across two possible protocols. If the uterotrophic bioassay is an effective procedure for measuring the effects of these chemicals, then we expect to see consistent responses to various dosages across all labs and groupings.
+  In this report, we analyze data from an international validation study to measure the effectiveness of the rat uterotrophic bioassay. The bioassay being studied attempts to measure the estrogenic effect of certain chemicals. The two chemicals used in this study have well-known effects, so we would like to verify that the bioassay produces consistent results in rats that have been administered various dosages of the chemicals across two possible protocols. If the uterotrophic bioassay is an effective procedure for measuring the effects of these chemicals, then we expect to see consistent responses to various dosages across all labs and groupings.
 
 ### Methods
 
-  To measure the consistency of the responses, we fit iterations of a linear mixed effects model on the provided dataset. The model is conditioned on the labs to account for lab-to-lab variability. Each iteration of the model differs slightly in transformations and conditioning of the predictors/responses until we arrive at a model that we deem most appropriate for the dataset. We then evaluate the final model to determine whether it predicts large variation in responses to the dosages between labs, or if it predicts a consistent measured response to the chemicals. We do this by drawing samples of the random effects from the final model and determining if the dose-response curves across labs display homogeneous trends. 
+  To measure the consistency of the responses, we fit iterations of a linear mixed effects model on the provided dataset. The random effects of the models are conditioned on the labs to account for lab-to-lab variability. Each iteration of the model differs slightly in transformations of the predictors and response until we arrive at a model that we deem most appropriate for the dataset. We then evaluate the final model to determine whether it displays large variation in responses to the dosages between labs, or if it predicts a consistent measured response to the chemicals. We do this by drawing samples of the random effect of dose 1 from the final model, and determining if the dose-response curves across labs display homogeneous trends. 
 
 ### Model-Fitting
+
+The structure of our model is described below:
 
 $$
 y_{ij} \sim \beta_{0,i} + \beta_{1,i}x_{ij,d_1} + \beta_{2,i}x_{ij,d_2} + \beta_{3,i}x_{ij,p_B} + \beta_{4,i}x_{ij,p_C} + \beta_{5,i}x_{ij,p_D} + \beta_{6,i}x_{ij,log(w)} + \epsilon  
@@ -53,7 +55,7 @@ $$
 
 
 
-To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose1 and dose2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. Body weight and uterus weight are log-transformed to account for the right skew in the data (Fig. 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Fig. 2). The summary statistics of the model described above can be found in Tables 1-4, and diagnostic plots using the residuals can be found in Figure 3. The results of the random effects that were cut off from Table 2 can be found in the Appendix.
+To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose 1 and dose 2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. Body weight and uterus weight are log-transformed to account for the right skew in the data (Fig. 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Fig. 2). The summary statistics of the model described above can be found in Tables 1-4, and diagnostic plots using the residuals can be found in Figure 3. The means of the random effects that were cut off from Table 2 can be found in the Appendix.
 
 We start at a reduced form of this model and augment it to its full form after initial analyses.
 
@@ -299,7 +301,9 @@ $$
 \text{Figure 3: Diagnostic Plots of Initial Model}
 $$
 
-Among the problems in these plots is the nonlinearity in the Residuals vs. Predictor plot for dose1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) (we add a small number to dose because we cannot take the reciprocal of zero). We evaluate this transformed model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy on a single hold-out sample, which we measure using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors. The results are in the following tables and figures:
+Among the problems in these diagnostic plots is the nonlinearity in the Residuals vs. Predictor plot for dose 1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) (we add a small number to dose because we cannot take the reciprocal of zero). We evaluate this transformed model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy on a single hold-out sample, which we measure using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors. The results are in the following tables and figures:
+
+\par
 
 $$
 \text{Tables 5-8: Summary Statistics of Transformed Dose Model}
@@ -368,11 +372,11 @@ $$
 kable(errtab)
 ```
 
-Based on the residual plots, this mixed model best satisfies the assumptions of linear regression. However, we note that taking the square root of log(blot) improves the residual plot at the cost of slightly lower predictive accuracy on the hold-out sample dataset.
+Based on the residual plots, this mixed model best satisfies the assumptions of linear regression. However, we note that taking the square root of log(blot) reduces the arching in the residual plot at the cost of slightly lower predictive accuracy on the hold-out sample dataset.
 
 ### Results
 
-The plot below samples random dose1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve. The black curves plot the means of the random effects from the model output. 
+The figure below takes samples of the random dose 1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve. The black curves represent the means of the random effects from the model output. 
 
 ```{r fig6, fig.height=70, fig.width=45}
 
@@ -388,22 +392,22 @@ $$
 $$
 
 
-Although the dose effect curves of each lab mostly trend positive, the variance in the dose1 effects by lab is higher than we would like. The distance between the lowest range and highest range of dose effect curves is large enough that we would be skeptical of how close any observed dose effect curve would be to the true effect of a chemical. Therefore, we do not recommend this bioassay procedure as a reliable method for consistently measuring the estrogenic effects of chemicals in rats. 
+Although the dose effect curves of each lab mostly trend positive, the variance in the dose 1 effects by lab is higher than we would like. The distance between the lowest range and highest range of dose effect curves is large enough that we would be skeptical of how close any observed dose effect curve would be to the true effect of a chemical. Therefore, we do not recommend this bioassay procedure as a reliable method for consistently measuring the estrogenic effects of chemicals in rats. 
 
 ### Discussion
 
-While our model seems to mostly satisfy the assumptions for regression, the central range of the residuals do show a slight curve, which may indicate that the response may better fit a different distribution, such as a mixture of gaussians. Some areas of improvement for the model include trying to identify clusters on the initial dose effect curves, or applying a Bayesian approach to mixed effects.
+While our model seems to mostly satisfy the assumptions for regression, the central range of the residuals do show a slight curve, which may indicate that the response may better fit a different distribution, such as a mixture of Gaussians. Some areas of improvement for the model include trying to identify clusters on the initial dose effect curves, or applying a Bayesian approach to mixed effects.
 
 ### Contributions
 
-Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped evaluate the models and compile analyses and explanations into a report. Approaches to analysis were a joint effort by all members of the group. Implementation and analysis of the mixed effects model was a joint effort by all members of the group. 
+Nathaniel Brown made the visualizations and tables for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped evaluate the models and compile analyses and explanations into a report. Approaches to analysis and implementation of mixed effects models were a joint effort by all members of the group.
 
 ### Appendix
 
 ##### Complete Results of Random Means for Each Model:
 
 $$
-\text{Table 2}
+\text{Table 2: Mean Random Effects for Initial Model}
 $$
 
 ```{r}
@@ -411,7 +415,7 @@ kable(t(round(lmer_list(m1)[[2]], 4)))
 ```
 
 $$
-\text{Table 6}
+\text{Table 6: Mean Random Effects for Transformed Dose Model}
 $$
 
 ```{r}
@@ -420,7 +424,7 @@ kable(t(round(lmer_list(m2)[[2]], 4)))
 
 
 $$
-\text{Table 11}
+\text{Table 11: Mean Random Effects for Transformed Dose and Blotted Uterus Weight Model}
 $$
 
 ```{r}
