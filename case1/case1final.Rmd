@@ -11,7 +11,7 @@ output:
 
 ```{r setup, include=FALSE, echo=FALSE}
 set.seed(440)
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
 library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rstan); library(lme4); library(mvtnorm); library(gridExtra)
 ```
 
@@ -38,18 +38,27 @@ dat_test <- dat[testrows,]
 ### Model-Fitting
 
 $$
-y_{ij} \sim \beta_{0,i} + \beta_{1,i}x_{ij,d_1} + \beta_{2,i}x_{ij,d_2} + \beta_{3,i}x_{ij,p_B} + \beta_{4,i}x_{ij,p_C} + \beta_{5,i}x_{ij,p_D} + \beta_{6,i}x_{ij,log(w)} + \epsilon
-\\
-\beta_{0:5,i} \sim N(\mu_{0:5,i}, \sigma^2_{0:5,i})
-\\
-\epsilon \sim N(0, \sigma^2)
+y_{ij} \sim \beta_{0,i} + \beta_{1,i}x_{ij,d_1} + \beta_{2,i}x_{ij,d_2} + \beta_{3,i}x_{ij,p_B} + \beta_{4,i}x_{ij,p_C} + \beta_{5,i}x_{ij,p_D} + \beta_{6,i}x_{ij,log(w)} + \epsilon  
 $$
+
+
+$$
+\beta_{0:5,i} \sim N(\mu_{0:5,i}, \sigma^2_{0:5,i})  
+$$  
+
+
+$$
+\epsilon \sim N(0, \sigma^2)  
+$$
+
+
 
 To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose1 and dose2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. Body weight and uterus weight are log-transformed to account for the right skew in the data (Fig. 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Fig. 2). The summary statistics of the model described above can be found on Table 1.
 
 We start at a reduced form of this model and augment it to its full form after initial analyses.
 
 ```{r fxns}
+
 expsq <- function(x){
   exp(x^2)
 }
@@ -142,8 +151,18 @@ lmer_list <- function(mod){
 format_lmer_list <- function(L = NA){
 
   colnames(L$fixed) <- c("Mean Fixed Effects", "Variance Fixed Effects")
-  colnames(L$residual) <- c("Residual Variance")
+  L$randomvars <- data.frame(L$randomvars)
+  colnames(L$randomvars) <- c("Variance Random Effects")
+  colnames(L$residual) <- c("Variance Residuals")
   L <- lapply(L, round, 4)
+  
+  randmeanslong <- L$randommeans
+  randmeansshort <- randmeanslong[,1:3]
+  randmeansshort <- cbind(randmeansshort, "...")
+  randmeansshort <- cbind(randmeansshort, randmeanslong[,ncol(randmeanslong) - (1:3)])
+  
+  L$randommeans <- randmeansshort
+  
   return(L)
 }
 
@@ -186,6 +205,7 @@ simdose1curves <- function(mod, nsim = 1000, untrans_y = exp, lab = NA, showorig
   
   response <- matrix(untrans_y(fixedintereffect + protoeffect + bodyeffect + dose2effect + labsims + dose1effect), nrow = nsim)
 
+  par(cex = 2)
   plot(0,0, type="n", xlim = c(min(dose1), max(dose1)), ylim = c(0,500), xlab = "Dose 1", ylab="Blotted Uterus Weight", main = paste("Dose 1 Response Curve for", lab, "Lab"))
   for(r in 2:nsim){ #for each simulation...
     lines(dose1, response[r,], col=rgb(.9,.9,.9))
@@ -193,11 +213,10 @@ simdose1curves <- function(mod, nsim = 1000, untrans_y = exp, lab = NA, showorig
   if(showoriginaldata){
     points(x=dat$dose1, y=dat$blot)
   }
-  lines(dose1, response[1,], col="black") #plot the mean line in black
+  lines(dose1, response[1,], col="black", lwd=5) #plot the mean line in black
 }
 
 ```
-
 
 ```{r models, echo=FALSE}
 # RANDOM SLOPE MODEL
@@ -220,8 +239,6 @@ errs3 <- compute_errs(m3, untrans_y=expsq)
 errs4 <- compute_errs(m4, untrans_y=expsq)
 
 ```
-
-\par
 
 ```{r, echo=FALSE, fig1, fig.cap="Log Transformations of Weights", fig.height=5, fig.width=15}
 labweights <- dat[,c("body", "blot", "lab")]
@@ -249,8 +266,6 @@ grid.arrange( g1, g2, ncol=2)
 
 ```
 
-\par
-
 ```{r, fig2, fig.cap="Lab-to-Lab Variability in Intercepts and Slopes", echo=FALSE, fig.height=5, fig.width=15, warning=FALSE}
 
 graph1 <- ggplot(data=dat,aes(x=dose1,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="dose 1", y="log(blot)", title="Dose 1 vs. log(blot)") + theme(plot.title = element_text(hjust = 0.5))
@@ -259,17 +274,13 @@ graph2 <- ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + g
 grid.arrange( graph1, graph2, ncol=2)
 ```
 
-\par
-
 ```{r tab1}
 L1 <- format_lmer_list(L1)
-# kable(L1[[1]], caption = "Summary Statistics of Initial Model")
-# #kable(L1[[2]]) %>% kable_styling(font_size = 7)
-# kable(L1[[3]])
-# kable(L1[[4]])
+kable(L1[[1]], caption = "Summary Statistics of Initial Model")
+kable(L1[[2]])
+kable(L1[[3]])
+kable(L1[[4]])
 ```
-
-
 
 ```{r fig3, echo=FALSE, fig.height=10, fig.width=15, fig.cap="Diagnostic Plots of Initial Model"}
 plot_lmer(m1, c(2,3))
@@ -280,10 +291,10 @@ Among the problems in these plots is the nonlinearity in the Residuals vs. Predi
 
 ```{r tab2}
 L2 <- format_lmer_list(L2)
-# kable(L2[[1]], caption = "Summary Statistics of Transformed Dose 1")
-# #kable(L2[[2]])
-# kable(L2[[3]])
-# kable(L2[[4]])
+kable(L2[[1]], caption = "Summary Statistics of Transformed Dose 1")
+kable(L2[[2]])
+kable(L2[[3]])
+kable(L2[[4]])
 ```
 
 ```{r fig4, fig.height=10, fig.width=15, fig.cap="Diagnostic Plots of Model with Transformed Dose 1"}
@@ -303,13 +314,13 @@ kable(errtab[-3,], caption = "Predictive Error of First Two Models")
 
 ```{r tab4}
 L3 <- format_lmer_list(L3)
-# kable(L3[[1]], caption = "")
-# #kable(L3[[2]])
-# kable(L3[[3]])
-# kable(L3[[4]])
+kable(L3[[1]], caption = "")
+kable(L3[[2]])
+kable(L3[[3]])
+kable(L3[[4]])
 ```
 
-```{r fig5}
+```{r fig5, fig.cap="Diagnostic Plots of Model with Transformed Dose 1 and Blotted Uterus Weight"}
 plot_lmer(m3, parmfrow = c(2,3), expsq)
 ```
 
@@ -322,8 +333,9 @@ This is our best-fitting mixed model we could fit. **maybe. it looks like sqrt l
 ### Results
 
 #INCOMPLETE 
-The plot below samples random dose1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve. 
-```{r fig6, fig.height=51, fig.width=15, fig.cap="Dose 1 Response Curves for Each Lab", }
+The plot below samples random dose1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve.
+
+```{r fig6, fig.height=51, fig.width=30, fig.cap="Dose 1 Response Curves for Each Lab"}
 
 par(mfrow = c(7,3))
 for(eachlab in unique(dat$lab)){
