@@ -33,7 +33,7 @@ dat_test <- dat[testrows,]
 
 ### Methods
 
-  To measure the consistency of the responses, we fit iterations of a linear mixed effects model on the provided dataset. The model is conditioned on the labs to account for lab-to-lab variability. Each iteration of the model differs slightly in transformations and conditioning of the predictors/responses until we arrive at a model that we deem most appropriate for the dataset. We then evaluate the final model to determine whether it predicts large variation in responses to the dosages between labs, or if it predicts a consistent measured response to the chemicals.
+  To measure the consistency of the responses, we fit iterations of a linear mixed effects model on the provided dataset. The model is conditioned on the labs to account for lab-to-lab variability. Each iteration of the model differs slightly in transformations and conditioning of the predictors/responses until we arrive at a model that we deem most appropriate for the dataset. We then evaluate the final model to determine whether it predicts large variation in responses to the dosages between labs, or if it predicts a consistent measured response to the chemicals. We do this by drawing samples of the random effects from the final model and determining if the dose-response curves across labs display homogeneous trends. 
 
 ### Model-Fitting
 
@@ -309,7 +309,7 @@ kable(errtab[-3,], caption = "Predictive Error of First Two Models")
 
 ```
 
-**comment comment comment**. Another problem with these residual plots is the slight arching in the Residuals vs. Fitted Values. To counteract this, we added a square root transformation to the response. **well then again we might not*** The results are below:
+Another problem with these residual plots is the slight arching in the Residuals vs. Fitted Values. To counteract this, we added a square root transformation to the response. The model summary statistics, diagnostic plots, and predictive accuracy are below:
 
 
 ```{r tab4}
@@ -328,12 +328,11 @@ plot_lmer(m3, parmfrow = c(2,3), expsq)
 kable(errtab, caption = "Predictive Error of All Models")
 ```
 
-This is our best-fitting mixed model we could fit. **maybe. it looks like sqrt log blot improves residual plot but worsens prediction**
+Based on the residual plots, this mixed model best satisfies the assumptions of linear regression. However, we note that taking the square root of log(blot) improves the residual plot at the cost of slightly lower predictive accuracy.
 
 ### Results
 
-#INCOMPLETE 
-The plot below samples random dose1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve.
+The plot below samples random dose1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve. The black curves plot the means of the random effects from the model output. 
 
 ```{r fig6, fig.height=51, fig.width=30, fig.cap="Dose 1 Response Curves for Each Lab"}
 
@@ -344,6 +343,8 @@ for(eachlab in unique(dat$lab)){
 par(mfrow = c(1,1))
 ```
 
+Although the dose effect curves of each lab mostly trend positive, the variance in the dose1 effects by lab is higher than we would like. The distance between the lowest range and highest range of dose effect curves is large enough that we would be skeptical of how close any observed dose effect curve would be to the true effect of a chemical. Therefore, we do not recommend this bioassay procedure as a reliable method for consistently measuring the estrogenic effects of chemicals in rats. 
+
 <!--
 account for correlation using multivariate normal.
 use 2 dimensional mvnorm for slope and intercept.
@@ -352,11 +353,8 @@ just plug in average values for everything else.
 
 ### Discussion
 
-The variance in the dose1 effects by lab is noticeably high, so we say that the bioassay does depend on lab and thus this study fails miserably. 
-
-This explodes around 10 and it's only applicable for dose less than or equal to 10.
+While our model seems to mostly satisfy the assumptions for regression, the central range of the residuals do show a slight curve, which may indicate that the response may better fit a different distribution, such as a mixture of gaussians. Some areas of improvement for the model include trying to identify clusters on the initial dose effect curves, or applying a Bayesian approach to mixed effects.
 
 ### Contributions
 
 Nathaniel Brown made the visualizations for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped pair on EDA analysis and identify approaches to handle the data. Approaches to analysis were a joint effort by all members of the group. Nathanial implemented analysis for the univariate normal and multivariate normal approaches. Implementation and analysis of the mixed effects model was a joint effort by all members of the group. 
-
