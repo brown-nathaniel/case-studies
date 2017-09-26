@@ -8,6 +8,13 @@ output:
   fig_caption: yes
 ---
 
+#GOALS FOR FINAL REPORT:
+## take out the sqrt model from back in the day
+## add the kernel model (m5 here)
+### the residual variance decreases for higher fitted values. let's further investigate
+## update those simulation plots
+## proofread 
+
 
 ```{r setup, include=FALSE, echo=FALSE}
 set.seed(440)
@@ -30,9 +37,6 @@ dat_test <- dat[testrows,]
 ```
 
 ```{r}
-
-plot(blot ~ invdose1, dat_train)
-plot(blot ~ logdose1, dat_train)
 
 #this also transforms the original dataframe
 kernel_reg <- function(dat_all = dat, predictor = "invdose1", numknots = NA, s = NA, showplots = FALSE){
