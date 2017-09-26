@@ -19,12 +19,61 @@ library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(rst
 ```{r}
 dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
 dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
+dat$invdose1 <- 1/(dat$dose1+1/2)
+dat$logdose1 <- log(dat$dose1 + 1/2)
 
 ndat <- nrow(dat)
 trainrows <- sample(x=1:ndat, size = ceiling(0.75*ndat))
 testrows <- setdiff(1:ndat, trainrows)
 dat_train <- dat[trainrows,]
 dat_test <- dat[testrows,]
+```
+
+```{r}
+
+plot(blot ~ invdose1, dat_train)
+plot(blot ~ logdose1, dat_train)
+
+#this also transforms the original dataframe
+kernel_reg <- function(dat_all = dat, predictor = "invdose1", numknots = NA, s = NA, showplots = FALSE){
+
+  x <- dat_all[[predictor]]
+  if(is.na(numknots)){
+    numknots <- 4
+  }
+  
+  tau <- seq(min(x), max(x), length.out = numknots)
+  
+  if(showplots){
+    plot(dat_all$blot ~ x)
+    abline(v=tau, col="blue")
+  }
+  
+  if(is.na(s)){
+    s <- mean(diff(tau))/2 
+  }
+  
+  X <- array(NA, c(length(x),numknots)) 
+  #get densities of each x according to distribution of each knot  
+  knot_densities <- t(apply((as.matrix(x)), 1, dnorm, mean=tau, sd=s)) 
+  X <- apply(knot_densities, 2, '*', x) 
+  #multiply each x by it's respective knot weighting
+  colnames(X) <- paste0("kern", 1:ncol(X))
+  dat_all <- cbind(dat_all, X)
+  colstr <- paste(colnames(X), collapse=" + ")
+  #eval(parse(text = "colnames(X)"))
+  eval(parse(text = paste("mod <- lmer(log(blot) ~ proto + body + (",colstr," + dose2 + 1|lab), data=dat_all[trainrows,], REML=FALSE)")))
+  
+  return(list(datkerns = X, mod = mod))
+}
+
+kernlist1 <- kernel_reg()
+dat_kern <- cbind(dat, kernlist1[[1]])
+dat_train_kern <- dat_kern[trainrows,]
+dat_test_kern <- dat_kern[testrows,]
+m1 <- kernlist1[[2]]
+plot_lmer(m4, parmfrow=c(3,3))
+compute_errs(m4, dat_test_kern)
 ```
 
 ### Introduction
@@ -77,7 +126,7 @@ plot_lmer <- function(mod, parmfrow = NA, untrans_y = exp){
   qqnorm(resids, main = "Normal Quantile-Quantile Plot")
   hist(resids, main = "Histogram of Residuals", xlab="Residuals", col = "gray")
   
-  continuouseffects <- grep("(dose)|(body)", colnames(coef(mod)[[1]]), value=TRUE)
+  continuouseffects <- grep("(dose)|(body)|(kern)", colnames(coef(mod)[[1]]), value=TRUE)
 
   #for cases when we interact with proto
   continuouseffects <- gsub(":", "')*", continuouseffects)
@@ -187,8 +236,9 @@ simdose1curves <- function(mod, nsim = 1000, untrans_y = exp, lab = NA, showorig
   dose1sims <- sims[,2]
   labsims <- sims[,1]
   
-  dose1sims <- c(MEANS[2], dose1sims) #the first dose mean is just the 
-  labsims <- c(MEANS[1], labsims) #the first dose mean is just the 
+  #the first mean is the overall mean from which the others were simulated
+  dose1sims <- c(MEANS[2], dose1sims) 
+  labsims <- c(MEANS[1], labsims)
   nsim <- nsim + 1
   
   #constant data
@@ -225,15 +275,15 @@ m1 <- lmer(log(blot) ~ proto + log(body) + (dose1 + dose2 + 1|lab), data=dat_tra
 
 m2 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 
-m3 <- lmer(sqrt(log(blot)) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+#m3 <- lmer(sqrt(log(blot)) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 
 L1 <- lmer_list(m1)
 L2 <- lmer_list(m2)
-L3 <- lmer_list(m3)
+#L3 <- lmer_list(m3)
 
 errs1 <- compute_errs(m1)
 errs2 <- compute_errs(m2)
-errs3 <- compute_errs(m3, untrans_y=expsq)
+#errs3 <- compute_errs(m3, untrans_y=expsq)
 
 ```
 
