@@ -13,7 +13,7 @@ output:
 ## add the kernel model (m5 here)
 ### the residual variance decreases for higher fitted values. let's further investigate
 ## update those simulation plots
-## proofread 
+## proofread
 
 
 ```{r setup, include=FALSE, echo=FALSE}
@@ -68,16 +68,20 @@ kernel_reg <- function(dat_all = dat, predictor = "invdose1", numknots = NA, s =
   #eval(parse(text = "colnames(X)"))
   eval(parse(text = paste("mod <- lmer(log(blot) ~ proto + body + (",colstr," + dose2 + 1|lab), data=dat_all[trainrows,], REML=FALSE)")))
   
-  return(list(datkerns = X, mod = mod))
+  return(list(datkerns = X, mod = mod, k = numknots, s = s))
 }
 
-kernlist1 <- kernel_reg()
-dat_kern <- cbind(dat, kernlist1[[1]])
-dat_train_kern <- dat_kern[trainrows,]
-dat_test_kern <- dat_kern[testrows,]
-m1 <- kernlist1[[2]]
-plot_lmer(m4, parmfrow=c(3,3))
-compute_errs(m4, dat_test_kern)
+par(mfrow = c(1,1))
+kernlist5 <- kernel_reg(numknots = 6, showplots=TRUE, s = 1)
+dat_kern5 <- cbind(dat, kernlist5[[1]])
+dat_train_kern5 <- dat_kern5[trainrows,]
+dat_test_kern5 <- dat_kern5[testrows,]
+m5 <- kernlist5[[2]]
+png("knotplot.png")
+plot_lmer(m5, dat_train_kern5, parmfrow=c(4,3))
+dev.off()
+compute_errs(m5, dat_test_kern5)
+
 ```
 
 ### Introduction
@@ -117,13 +121,13 @@ We start at a reduced form of this model and augment it to its full form after i
 expsq <- function(x){
   exp(x^2)
 }
-plot_lmer <- function(mod, parmfrow = NA, untrans_y = exp){
+plot_lmer <- function(mod, train = dat_train, parmfrow = NA, untrans_y = exp){
   if(mean(is.na(parmfrow) > 0)){
     par(mfrow = c(1,1))
   }else{
     par(mfrow = parmfrow)
   }
-  fitvals <- untrans_y(predict(mod, dat_train))
+  fitvals <- untrans_y(predict(mod, train))
   resids <- summary(mod)[["residuals"]]
 
   plot(fitvals, resids, main = "Residuals vs. Fitted Values", xlab = "Fitted Values", ylab = "Residuals"); abline(h=0)
@@ -145,7 +149,7 @@ plot_lmer <- function(mod, parmfrow = NA, untrans_y = exp){
   )
   X <- apply(as.matrix(continuouseffects), 1,
         function(x){
-          with(dat_train, eval(parse(text = x)))
+          with(train, eval(parse(text = x)))
         }
   )
   for(c in 1:ncol(X)){
