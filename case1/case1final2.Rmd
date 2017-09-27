@@ -8,14 +8,6 @@ output:
   fig_caption: yes
 ---
 
-#GOALS FOR FINAL REPORT:
-## take out the sqrt model from back in the day
-## add the kernel model (m5 here)
-### the residual variance decreases for higher fitted values. let's further investigate
-## update those simulation plots
-## proofread
-
-
 ```{r setup, include=FALSE, echo=FALSE}
 set.seed(440)
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
@@ -199,7 +191,9 @@ simknotcurves <- function(modlist){
     labs(title = "Weight by Lab",
      x = "Dose 1",
      y = "Blotted Uterus Weight",
-     color = "Lab")
+     color = "Lab") + 
+    theme(axis.text.x = element_text(hjust=1),
+        plot.title = element_text(hjust = 0.5))
 
   
   # knotbetas <- L$randommeans[knotinds, lab] #these are the betas for the dose1 effect kernals
@@ -499,7 +493,7 @@ kable(L5[[4]])
 ```{r fig5, fig.height=5, fig.width=8}
 par(cex = 0.5)
 #plot_lmer(m3, parmfrow = c(2,3), expsq)
-plot_lmer(m5, dat_train_kern5, parmfrow = c(4,3))
+plot_lmer(m5, dat_train_kern5, parmfrow = c(3,3))
 ```
 
 $$
@@ -521,7 +515,7 @@ Based on the residual plots, this mixed model best satisfies the assumptions of 
 
 The figure below takes samples of the random dose 1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve. The black curves represent the means of the random effects from the model output. 
 
-```{r fig6, fig.height=70, fig.width=45}
+```{r fig6, fig.height=5, fig.width=8}
 # 
 # par(mfrow = c(7,3), cex=3)
 # for(eachlab in sort(unique(dat$lab))){
