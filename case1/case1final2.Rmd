@@ -127,7 +127,7 @@ simdose1curves <- function(mod, nsim = 1000, untrans_y = exp, lab = NA, showorig
   lines(dose1, response[1,], col="black", lwd=5) #plot the mean line in black
 }
 
-simknotcurves <- function(modlist){
+simknotcurves <- function(modlist, protocol="A"){
   
   mod <- modlist[["mod"]]
   # L <- lmer_list(mod)
@@ -176,10 +176,10 @@ simknotcurves <- function(modlist){
       cbind(
         data.frame(
           lab = eachlab,
-          proto = "A",
+          proto = protocol,
           dose1 = dose1,
           dose2 = 0,
-          body = mean(dat$body),
+          body = mean(dat$body[dat$proto == protocol]),
           blot = NA
         ),
         dose1knots
@@ -188,7 +188,7 @@ simknotcurves <- function(modlist){
   }
   ggplot(newdat, aes(x=dose1, y=exp(predict(mod, newdat)), color=lab)) + 
     geom_line() + 
-    labs(title = "Weight by Lab",
+    labs(title = "Dose 1 Curve by Lab",
      x = "Dose 1",
      y = "Blotted Uterus Weight",
      color = "Lab") + theme(axis.text.x = element_text(hjust=1),
@@ -431,7 +431,7 @@ $$
 \text{Figure 3: Diagnostic Plots of Initial Model}
 $$
 
-Among the problems in these diagnostic plots is the nonlinearity in the Residuals vs. Predictor plot for dose 1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) to reduce leverage (we add a small number to dose because we cannot take the reciprocal of zero). We evaluate this transformed model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy on a single hold-out sample, which we measure using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors. The results are in the following tables and figures:
+Among the problems in these diagnostic plots is the nonlinearity in the Residuals vs. Predictor plot for dose 1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) to reduce the leverage of observations with high dosage (we add a small number to dose because we cannot take the reciprocal of zero). We evaluate this transformed model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy on a single hold-out sample, which we measure using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors. The results are in the following tables and figures:
 
 \par
 
@@ -470,7 +470,7 @@ kable(errtab[-3,])
 
 ```
 
-The residual plots contains signs of slight arching in the Residual vs. Fitted Values. This suggests that a non-linear approach may be helpful, so we apply kernel regression.
+For this model, the residual plots indicate a better fit, and the residual variance decreases from `r L1[[4]]` to `r L2[[4]]`, which means that this model is better at explaining variance in uterus weight. The residual plots contains signs of slight arching in the Residual vs. Fitted Values. This suggests that a non-linear approach may be helpful, so we replace the reciprocal of dose 1 with Gaussian kernels on the log of (dose1 + 1/2). We take the log instead of the reciprocal because it reduces the influence of high dosage observations, and it also preserves the order of the observations.
 
 $$
 \text{Tables 10-13: Summary Statistics of Transformed Dose and Transformed Uterus Weight Model}
