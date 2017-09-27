@@ -36,91 +36,8 @@ dat_train <- dat[trainrows,]
 dat_test <- dat[testrows,]
 ```
 
-```{r}
-
-#this also transforms the original dataframe
-kernel_reg <- function(dat_all = dat, predictor = "invdose1", numknots = NA, s = NA, showplots = FALSE){
-
-  x <- dat_all[[predictor]]
-  if(is.na(numknots)){
-    numknots <- 4
-  }
-  
-  tau <- seq(min(x), max(x), length.out = numknots)
-  
-  if(showplots){
-    plot(dat_all$blot ~ x)
-    abline(v=tau, col="blue")
-  }
-  
-  if(is.na(s)){
-    s <- mean(diff(tau))/2 
-  }
-  
-  X <- array(NA, c(length(x),numknots)) 
-  #get densities of each x according to distribution of each knot  
-  knot_densities <- t(apply((as.matrix(x)), 1, dnorm, mean=tau, sd=s)) 
-  X <- apply(knot_densities, 2, '*', x) 
-  #multiply each x by it's respective knot weighting
-  colnames(X) <- paste0("kern", 1:ncol(X))
-  dat_all <- cbind(dat_all, X)
-  colstr <- paste(colnames(X), collapse=" + ")
-  #eval(parse(text = "colnames(X)"))
-  eval(parse(text = paste("mod <- lmer(log(blot) ~ proto + body + (",colstr," + dose2 + 1|lab), data=dat_all[trainrows,], REML=FALSE)")))
-  
-  return(list(datkerns = X, mod = mod, k = numknots, s = s))
-}
-
-par(mfrow = c(1,1))
-kernlist5 <- kernel_reg(numknots = 6, showplots=TRUE, s = 1)
-dat_kern5 <- cbind(dat, kernlist5[[1]])
-dat_train_kern5 <- dat_kern5[trainrows,]
-dat_test_kern5 <- dat_kern5[testrows,]
-m5 <- kernlist5[[2]]
-png("knotplot.png")
-plot_lmer(m5, dat_train_kern5, parmfrow=c(4,3))
-dev.off()
-compute_errs(m5, dat_test_kern5)
-
-```
-
-### Introduction
-
-  In this report, we analyze data from an international validation study to measure the effectiveness of the rat uterotrophic bioassay. The bioassay being studied attempts to measure the estrogenic effect of certain chemicals. The two chemicals used in this study have well-known effects, so we would like to verify that the bioassay produces consistent results in rats that have been administered various dosages of the chemicals across two possible protocols. If the uterotrophic bioassay is an effective procedure for measuring the effects of these chemicals, then we expect to see consistent responses to various dosages across all labs and groupings.
-
-### Methods
-
-  To measure the consistency of the responses, we fit iterations of a linear mixed effects model on the provided dataset. The random effects of the models are conditioned on the labs to account for lab-to-lab variability. Each iteration of the model differs slightly in transformations of the predictors and response until we arrive at a model that we deem most appropriate for the dataset. We then evaluate the final model to determine whether it displays large variation in responses to the dosages between labs, or if it predicts a consistent measured response to the chemicals. We do this by drawing samples of the random effect of dose 1 from the final model, and determining if the dose-response curves across labs display homogeneous trends. 
-
-### Model-Fitting
-
-The structure of our model is described below:
-
-$$
-y_{ij} \sim \beta_{0,i} + \beta_{1,i}x_{ij,d_1} + \beta_{2,i}x_{ij,d_2} + \beta_{3,i}x_{ij,p_B} + \beta_{4,i}x_{ij,p_C} + \beta_{5,i}x_{ij,p_D} + \beta_{6,i}x_{ij,log(w)} + \epsilon  
-$$
-
-
-$$
-\beta_{0:5,i} \sim N(\mu_{0:5,i}, \sigma^2_{0:5,i})  
-$$  
-
-
-$$
-\epsilon \sim N(0, \sigma^2)  
-$$
-
-
-
-To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose 1 and dose 2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. Body weight and uterus weight are log-transformed to account for the right skew in the data (Fig. 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Fig. 2). The summary statistics of the model described above can be found in Tables 1-4, and diagnostic plots using the residuals can be found in Figure 3. The means of the random effects that were cut off from Table 2 can be found in the Appendix.
-
-We start at a reduced form of this model and augment it to its full form after initial analyses.
-
 ```{r fxns}
 
-expsq <- function(x){
-  exp(x^2)
-}
 plot_lmer <- function(mod, train = dat_train, parmfrow = NA, untrans_y = exp){
   if(mean(is.na(parmfrow) > 0)){
     par(mfrow = c(1,1))
@@ -174,7 +91,7 @@ abs_err <- function(actual, predicted){
   error <- actual - predicted
   mean(abs(error))
 }
- 
+
 compute_errs <- function(mod, test = dat_test, untrans_y = exp){
   preds <- untrans_y(predict(mod, test))
   absolute <- abs_err(test$blot, preds) %>% round(4)
@@ -182,102 +99,42 @@ compute_errs <- function(mod, test = dat_test, untrans_y = exp){
   return(list(abs_err = absolute, rms_err = rootmean))
 }
 
-lmer_list <- function(mod){
-  
-  fixeffmeans <- summary(mod)[["coefficients"]][,1]
-  fixeffsd <- summary(mod)[["coefficients"]][,2]
-  # randeffmeans_all <- getME(mod, "theta")
-  # numdots <- sapply(names(randeffmeans_all), gregexpr, pattern="." , fixed=TRUE) %>% sapply(length)
-  # randeffmeans <- randeffmeans_all[which((numdots) == 1)]
-  #randeffmeans <- ranef(mod)[["lab"]] %>% apply(2,mean)
-  randeffmeans <- t(ranef(mod)[["lab"]]) 
-  randeffvar <- diag(summary(mod)[["varcor"]][["lab"]])
-  residsd <- sigma(mod)
-  
-  #names(randeffmeans) <- names(randeffvar)
+kernel_reg <- function(dat_all = dat, predictor = "invdose1", numknots = NA, s = NA, showplots = FALSE){
 
-  fixefftab <- data.frame(fixeffmeans,fixeffsd^2)
-  names(fixefftab) <- c("mean", "variance")
-  #randefftab <- data.frame(randeffmeans,randeffvar)
-  #names(randefftab) <- c("mean", "variance")
-  residtab <- data.frame(residsd^2)
-  names(residtab) <- c("variance")
-  rownames(residtab) <- c("residual")
-  
-  return(list(fixed = fixefftab, randommeans = randeffmeans, randomvars = randeffvar, residual = residtab))  
-}
-
-format_lmer_list <- function(L = NA){
-
-  colnames(L$fixed) <- c("Mean Fixed Effects", "Variance Fixed Effects")
-  L$randomvars <- data.frame(L$randomvars)
-  colnames(L$randomvars) <- c("Variance Random Effects")
-  colnames(L$residual) <- c("Variance Residuals")
-  L <- lapply(L, round, 4)
-  
-  randmeanslong <- L$randommeans
-  randmeansshort <- randmeanslong[,1:3]
-  randmeansshort <- cbind(randmeansshort, "...")
-  randmeansshort <- cbind(randmeansshort, randmeanslong[,ncol(randmeanslong) - (2:0)])
-  
-  L$randommeans <- randmeansshort
-  
-  return(L)
-}
-
-simdose1curves <- function(mod, nsim = 1000, untrans_y = exp, lab = NA, showoriginaldata = FALSE){
-  
-  #simulated data
-  L <- lmer_list(mod)
-  MEANS <- c(L[["randommeans"]]["(Intercept)", lab], L[["randommeans"]][grep("dose1", rownames(L[["randommeans"]])), lab])
-  
-  COR_full <- attr(VarCorr(mod)[[1]], "correlation")
-
-  dose1ind <- grep("dose1", rownames(COR_full))
-  interind <- grep("Inter", rownames(COR_full))
-  
-  COR <- COR_full[c(interind,dose1ind), c(interind,dose1ind)]
-  sdxy <- prod(attr(VarCorr(mod)[[1]], "stddev")[c(interind,dose1ind)])
-  #cov(x,y) = cor(x,y)*sd(x)sd(y)
-  COV <- COR * sdxy
-  sims <- rmvnorm(nsim, mean = MEANS, sigma = COV)
-  dose1sims <- sims[,2]
-  labsims <- sims[,1]
-  
-  #the first mean is the overall mean from which the others were simulated
-  dose1sims <- c(MEANS[2], dose1sims) 
-  labsims <- c(MEANS[1], labsims)
-  nsim <- nsim + 1
-  
-  #constant data
-  protoeffect <- 0 #just assume baseline protocol
-  dose2 <- 0 
-  dose2trans <- eval(parse(text = grep("dose2", rownames(L$randommeans), value=T))) #in case dose2 needs to be transformed
-  dose2effect <- dose2trans*L$randommeans[grep("dose2", rownames(L$randommeans)), lab]
-  fixedintereffect <- L$fixed["(Intercept)","mean"]
-  protoeffect <- 0 
-  body <- (mean(dat_train$body))
-  bodyeffect <- log(body)*(L$fixed[grep("body", rownames(L$fixed)), "mean"])
-  
-  dose1 <- seq(0,10, 0.1)
-  dose1trans <- eval(parse(text = grep("dose1", rownames(L$randommeans), value=T)))
-  dose1effect <- (apply(t(dose1trans), 2, '*', dose1sims))
-  
-  response <- matrix(untrans_y(fixedintereffect + protoeffect + bodyeffect + dose2effect + labsims + dose1effect), nrow = nsim)
-
-  plot(0,0, type="n", xlim = c(min(dose1), max(dose1)), ylim = c(0,500), xlab = "Dose 1", ylab="Blotted Uterus Weight", main = paste("Dose 1 Response Curve for", lab, "Lab"))
-  for(r in 2:nsim){ #for each simulation...
-    lines(dose1, response[r,], col=rgb(.9,.9,.9))
+  x <- dat_all[[predictor]]
+  if(is.na(numknots)){
+    numknots <- 4
   }
-  if(showoriginaldata){
-    points(x=dat$dose1, y=dat$blot)
+  
+  tau <- seq(min(x), max(x), length.out = numknots)
+  
+  if(showplots){
+    plot(dat_all$blot ~ x)
+    abline(v=tau, col="blue")
   }
-  lines(dose1, response[1,], col="black", lwd=5) #plot the mean line in black
+  
+  if(is.na(s)){
+    s <- mean(diff(tau))/2 
+  }
+  
+  X <- array(NA, c(length(x),numknots)) 
+  #get densities of each x according to distribution of each knot  
+  knot_densities <- t(apply((as.matrix(x)), 1, dnorm, mean=tau, sd=s)) 
+  X <- apply(knot_densities, 2, '*', x) 
+  #multiply each x by it's respective knot weighting
+  colnames(X) <- paste0("kern", 1:ncol(X))
+  dat_all <- cbind(dat_all, X)
+  colstr <- paste(colnames(X), collapse=" + ")
+  #eval(parse(text = "colnames(X)"))
+  eval(parse(text = paste("mod <- lmer(log(blot) ~ proto + body + (",colstr," + dose2 + 1|lab), data=dat_all[trainrows,], REML=FALSE)")))
+  
+  return(list(datkerns = X, mod = mod, k = numknots, s = s))
 }
+
 
 ```
 
-```{r models, echo=FALSE}
+```{r models, cache=TRUE}
 # RANDOM SLOPE MODEL
 m1 <- lmer(log(blot) ~ proto + log(body) + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
 
@@ -293,7 +150,54 @@ errs1 <- compute_errs(m1)
 errs2 <- compute_errs(m2)
 #errs3 <- compute_errs(m3, untrans_y=expsq)
 
+par(mfrow = c(1,1))
+kernlist5 <- kernel_reg(numknots = 6, showplots=TRUE, s = 1)
+dat_kern5 <- cbind(dat, kernlist5[[1]])
+dat_train_kern5 <- dat_kern5[trainrows,]
+dat_test_kern5 <- dat_kern5[testrows,]
+m5 <- kernlist5[[2]]
+png("knotplot.png")
+plot_lmer(m5, dat_train_kern5, parmfrow=c(4,3))
+dev.off()
+compute_errs(m5, dat_test_kern5)
+
 ```
+
+
+
+### Introduction
+
+  In this report, we analyze data from an international validation study to measure the effectiveness of the rat uterotrophic bioassay. The bioassay being studied attempts to measure the estrogenic effect of certain chemicals. The two chemicals used in this study have well-known effects, so we would like to verify that the bioassay produces consistent results in rats that have been administered various dosages of the chemicals across two possible protocols. If the uterotrophic bioassay is an effective procedure for measuring the effects of these chemicals, then we expect to see consistent responses to various dosages across all labs and groupings.
+
+### Methods
+
+  To measure the consistency of the responses, we fit iterations of a linear mixed effects model on the provided dataset. The random effects of the models are conditioned on the labs to account for lab-to-lab variability. Each iteration of the model differs slightly in transformations of the predictors and response until we arrive at a model that we deem most appropriate for the dataset. We then evaluate the final model to determine whether it displays large variation in responses to the dosages between labs, or if it predicts a consistent measured response to the chemicals. We do this by drawing samples of the random effect of dose 1 from the final model, and determining if the dose-response curves across labs display homogeneous trends. 
+
+### Model-Fitting
+
+The structure of our model is described below:
+
+$$
+y_{ij} \sim \beta_{0,i} + \beta_{1,i}x_{ij,d_1} + \beta_{2,i}x_{ij,d_2} + \beta_{3,i}x_{ij,p_B} + \beta_{4,i}x_{ij,p_C} + \beta_{5,i}x_{ij,p_D} + \beta_{6,i}x_{ij,log(w)} + \epsilon  
+$$
+
+
+$$
+\beta_{0:5,i} \sim N(\mu_{0:5,i}, \sigma^2_{0:5,i})  
+$$  
+
+
+$$
+\epsilon \sim N(0, \sigma^2)  
+$$
+
+
+
+To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose 1 and dose 2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. Body weight and uterus weight are log-transformed to account for the right skew in the data (Fig. 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Fig. 2). The summary statistics of the model described above can be found in Tables 1-4, and diagnostic plots using the residuals can be found in Figure 3. The means of the random effects that were cut off from Table 2 can be found in the Appendix.
+
+We start at a reduced form of this model and augment it to its full form after initial analyses.
+
+
 
 ```{r fig1, fig.height=5, fig.width=15}
 labweights <- dat[,c("body", "blot", "lab")]
@@ -405,16 +309,16 @@ $$
 $$
 
 ```{r tab4}
-L3 <- format_lmer_list(L3)
-kable(L3[[1]])
-kable(L3[[2]])
-kable(L3[[3]])
-kable(L3[[4]])
+# L3 <- format_lmer_list(L3)
+# kable(L3[[1]])
+# kable(L3[[2]])
+# kable(L3[[3]])
+# kable(L3[[4]])
 ```
 
 ```{r fig5, fig.height=5, fig.width=8}
 par(cex = 0.5)
-plot_lmer(m3, parmfrow = c(2,3), expsq)
+#plot_lmer(m3, parmfrow = c(2,3), expsq)
 ```
 
 $$
@@ -437,12 +341,12 @@ Based on the residual plots, this mixed model best satisfies the assumptions of 
 The figure below takes samples of the random dose 1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve. The black curves represent the means of the random effects from the model output. 
 
 ```{r fig6, fig.height=70, fig.width=45}
-
-par(mfrow = c(7,3), cex=3)
-for(eachlab in sort(unique(dat$lab))){
-  simdose1curves(m3, 100, expsq, eachlab)
-}
-par(mfrow = c(1,1))
+# 
+# par(mfrow = c(7,3), cex=3)
+# for(eachlab in sort(unique(dat$lab))){
+#   simdose1curves(m3, 100, expsq, eachlab)
+# }
+# par(mfrow = c(1,1))
 ```
 
 $$
@@ -486,5 +390,5 @@ $$
 $$
 
 ```{r}
-kable(t(round(lmer_list(m3)[[2]], 4)))
+#kable(t(round(lmer_list(m3)[[2]], 4)))
 ```
