@@ -1,20 +1,12 @@
 ---
 title: "Analyzing Rat Bioassays"
 author: "Nathaniel Brown, Annie Tang, William Yang"
-date: "September 13, 2017"
+date: "September 27, 2017"
 output:
   pdf_document: default
   html_document: default
   fig_caption: yes
 ---
-
-#GOALS FOR FINAL REPORT:
-## take out the sqrt model from back in the day
-## add the kernel model (m5 here)
-### the residual variance decreases for higher fitted values. let's further investigate
-## update those simulation plots
-## proofread
-
 
 ```{r setup, include=FALSE, echo=FALSE}
 set.seed(440)
@@ -314,9 +306,9 @@ kernel_reg <- function(dat_all = dat, predictor = "logdose1", numknots = NA, s =
 
 ```{r models, cache=TRUE}
 # RANDOM SLOPE MODEL
-m1 <- lmer(log(blot) ~ proto + log(body) + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m1 <- lmer(log(blot) ~ proto + body + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
 
-m2 <- lmer(log(blot) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+m2 <- lmer(log(blot) ~ proto + body + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 
 #m3 <- lmer(sqrt(log(blot)) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
 kernlist5 <- kernel_reg(numknots = 3, showplots=FALSE)
@@ -345,11 +337,11 @@ errs5 <- compute_errs(m5, dat_test_kern5)
 
 ### Methods
 
-  To measure the consistency of the responses, we fit iterations of a linear mixed effects model on the provided dataset. The random effects of the models are conditioned on the labs to account for lab-to-lab variability. Each iteration of the model differs slightly in transformations of the predictors and response until we arrive at a model that we deem most appropriate for the dataset. We then evaluate the final model to determine whether it displays large variation in responses to the dosages between labs, or if it predicts a consistent measured response to the chemicals. We do this by drawing samples of the random effect of dose 1 from the final model, and determining if the dose-response curves across labs display homogeneous trends. 
+  To measure the consistency of the responses, we fit iterations of a linear mixed effects model on the provided dataset. The random effects of the models are conditioned on the labs to account for lab-to-lab variability. Each iteration of the model differs slightly in transformations of the predictors and response until we arrive at a model that we deem most appropriate for the dataset. We also fit a kernel regression model for each lab and plot the best fitting model. We then evaluate the results of the linear mixed effects model in conjunction with the kernel regression models to determine whether they display large variation in responses to the dosages between labs, or if they predict a consistent measured response to the chemicals. We do this by drawing samples of the random effect of dose 1 from the final linear mixed effects model, analyzing the kernel regression models, and determining if the dose-response curves across labs display homogeneous trends. 
 
 ### Model-Fitting
 
-The structure of our model is described below:
+The structure of our linear mixed effects model is described below:
 
 $$
 y_{ij} \sim \beta_{0,i} + \beta_{1,i}x_{ij,d_1} + \beta_{2,i}x_{ij,d_2} + \beta_{3,i}x_{ij,p_B} + \beta_{4,i}x_{ij,p_C} + \beta_{5,i}x_{ij,p_D} + \beta_{6,i}x_{ij,log(w)} + \epsilon  
@@ -367,7 +359,7 @@ $$
 
 
 
-To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose 1 and dose 2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. Body weight and uterus weight are log-transformed to account for the right skew in the data (Fig. 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Fig. 2). The summary statistics of the model described above can be found in Tables 1-4, and diagnostic plots using the residuals can be found in Figure 3. The means of the random effects that were cut off from Table 2 can be found in the Appendix.
+To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose 1 and dose 2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. Uterus weight is log-transformed to account for the right skew in the data (Fig. 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Fig. 2). The summary statistics of the model described above can be found in Tables 1-4, and diagnostic plots using the residuals can be found in Figure 3. The means of the random effects that were cut off from Table 2 can be found in the Appendix.
 
 We start at a reduced form of this model and augment it to its full form after initial analyses.
 
@@ -437,7 +429,7 @@ $$
 \text{Figure 3: Diagnostic Plots of Initial Model}
 $$
 
-Among the problems in these diagnostic plots is the nonlinearity in the Residuals vs. Predictor plot for dose 1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) (we add a small number to dose because we cannot take the reciprocal of zero). We evaluate this transformed model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy on a single hold-out sample, which we measure using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors. The results are in the following tables and figures:
+Among the problems in these diagnostic plots is the nonlinearity in the Residuals vs. Predictor plot for dose 1. To counter this, we transformed dose 1 by the reciprocal of (dose1 + 1/2) to reduce leverage (we add a small number to dose because we cannot take the reciprocal of zero). We evaluate this transformed model using summary statistics, diagnostic plots, and out-of-sample predictive accuracy on a single hold-out sample, which we measure using Mean Absolute Error $(\text{MAE} = E[|y - \hat{y}|])$ and Root Mean Squared Error $(\text{RMSE} = \sqrt{E[(y - \hat{y})^2]})$. Root Mean Squared Error penalizes more for extreme errors, while Mean Absolute Error simply averages all of the errors. The results are in the following tables and figures:
 
 \par
 
@@ -476,7 +468,7 @@ kable(errtab[-3,])
 
 ```
 
-Another problem with these residual plots is the slight arching in the Residuals vs. Fitted Values. To counteract this, we added a square root transformation to the response. The model summary statistics, diagnostic plots, and predictive accuracy are below:
+The residual plots contains signs of slight arching in the Residual vs. Fitted Values. This suggests that a non-linear approach may be helpful, so we apply kernel regression.
 
 $$
 \text{Tables 10-13: Summary Statistics of Transformed Dose and Transformed Uterus Weight Model}
@@ -499,7 +491,7 @@ kable(L5[[4]])
 ```{r fig5, fig.height=5, fig.width=8}
 par(cex = 0.5)
 #plot_lmer(m3, parmfrow = c(2,3), expsq)
-plot_lmer(m5, dat_train_kern5, parmfrow = c(4,3))
+plot_lmer(m5, dat_train_kern5, parmfrow = c(3,3))
 ```
 
 $$
@@ -515,11 +507,11 @@ $$
 kable(errtab)
 ```
 
-Based on the residual plots, this mixed model best satisfies the assumptions of linear regression. However, we note that taking the square root of log(blot) reduces the arching in the residual plot at the cost of slightly lower predictive accuracy on the hold-out sample dataset.
+Based on the residual plots, this mixed model best satisfies the assumptions of linear regression. However, we note that taking the square root of log(blot) reduces the arching in the residual plot at the cost of slightly lower predictive accuracy on the hold-out sample dataset. Our final kernel model is our best estimator for the blotted uterus weight with reasonable residual plots and predictive error.
 
 ### Results
 
-The figure below takes samples of the random dose 1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve. The black curves represent the means of the random effects from the model output. 
+The figure below takes samples of the random dose 1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve for each lab.
 
 ```{r fig6, fig.height=70, fig.width=45}
 # 
@@ -540,7 +532,7 @@ Although the dose effect curves of each lab mostly trend positive, the variance 
 
 ### Discussion
 
-While our model seems to mostly satisfy the assumptions for regression, the central range of the residuals do show a slight curve, which may indicate that the response may better fit a different distribution, such as a mixture of Gaussians. Some areas of improvement for the model include trying to identify clusters on the initial dose effect curves, or applying a Bayesian approach to mixed effects.
+While our model seems to mostly satisfy the assumptions for regression, the residuals do show a slight decrease in variance for large fitted values, which may indicate that the response better fits a different model, such as a mixture of Gaussians. Some areas of improvement for the model include trying to identify clusters on the initial dose effect curves, or applying a Bayesian approach to mixed effects.
 
 ### Contributions
 
