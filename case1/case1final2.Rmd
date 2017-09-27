@@ -339,7 +339,7 @@ errs5 <- compute_errs(m5, dat_test_kern5)
 
 ### Methods
 
-  To measure the consistency of the responses, we fit iterations of a linear mixed effects model on the provided dataset. The random effects of the models are conditioned on the labs to account for lab-to-lab variability. Each iteration of the model differs slightly in transformations of the predictors and response until we arrive at a model that we deem most appropriate for the dataset. We also fit a kernel regression model for each lab and plot the best fitting model. We then evaluate the results of the linear mixed effects model in conjunction with the kernel regression models to determine whether they display large variation in responses to the dosages between labs, or if they predict a consistent measured response to the chemicals. We do this by drawing samples of the random effect of dose 1 from the final linear mixed effects model, analyzing the kernel regression models, and determining if the dose-response curves across labs display homogeneous trends. 
+  To measure the consistency of the responses, we fit iterations of a linear mixed effects model on the provided dataset. The random effects of the models are conditioned on the labs to account for lab-to-lab variability. Each iteration of the model differs in transformations of the predictors and response, including Gaussian kernels on the dose 1 predictor, until we arrive at a model that we deem most appropriate for the dataset. We then evaluate the results of the linear mixed effects model to determine whether they display large variation in responses to the dosages between labs, or if they predict a consistent measured response to the chemicals. We do this by drawing samples of the random effect of dose 1 from the final mixed effects model, and determining if the dose-response curves across labs display homogeneous trends. 
 
 ### Model-Fitting
 
@@ -361,7 +361,7 @@ $$
 
 
 
-To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose 1 and dose 2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,log(w)}$ is the log(body weight) for $x_{ij}$. Uterus weight is log-transformed to account for the right skew in the data (Fig. 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Fig. 2). The summary statistics of the model described above can be found in Tables 1-4, and diagnostic plots using the residuals can be found in Figure 3. The means of the random effects that were cut off from Table 2 can be found in the Appendix.
+To fit the data, we used a mixed model, with fixed and random effects. Let $y_{ij}$ be the observed log(blotted uterus weight) for subject $x_{ij}$, the $j$th individual in lab $i$. $x_{ij,d_1}$ and $x_{ij,d_2}$ are the values of dose 1 and dose 2 for subject $x_{ij}$. $x_{ij,p_B}$, $x_{ij,p_C}$, and $x_{ij,p_D}$ are dummy variables indicating which protocol $x_{ij}$ was subjected to. $x_{ij,w}$ is the body weight for $x_{ij}$. Uterus weight is log-transformed to account for the right skew in the data (Fig. 1). We make the Gaussian assumption that the coefficients, $\beta$, are normally distributed according to some $\mu_i$ and $\sigma_i$. We add a random effect on all $\beta_{0:5,i}$ to account for the lab-to-lab variability in the intercepts and slopes of the blotted weight (Fig. 2). The summary statistics of the model described above can be found in Tables 1-4, and diagnostic plots using the residuals can be found in Figure 3. The means of the random effects that were cut off from Table 2 can be found in the Appendix.
 
 We start at a reduced form of this model and augment it to its full form after initial analyses.
 
@@ -436,7 +436,7 @@ Among the problems in these diagnostic plots is the nonlinearity in the Residual
 \par
 
 $$
-\text{Tables 5-8: Summary Statistics of Transformed Dose Model}
+\text{Tables 5-8: Summary Statistics of Reciprocal Dose 1 Model}
 $$
 
 ```{r tab2}
@@ -453,7 +453,7 @@ plot_lmer(m2, parmfrow = c(2,3))
 ```
 
 $$
-\text{Figure 4: Diagnostic Plots of Model with Transformed Dose 1}
+\text{Figure 4: Diagnostic Plots of Reciprocal Dose 1 Model}
 $$
 
 
@@ -465,15 +465,15 @@ $$
 ```{r tab3}
 errtab <- t(data.frame(x=as.numeric(errs1),y=as.numeric(errs2), z=as.numeric(errs5)))
 colnames(errtab) <- c("MAE","RMSE")
-rownames(errtab) <- c("Initial", "Reciprocal Dose 1", "Transformed Dose 1 and Uterus Weight")
+rownames(errtab) <- c("Initial", "Reciprocal Dose 1", "Kernels on Log Dose 1")
 kable(errtab[-3,])
 
 ```
 
-For this model, the residual plots indicate a better fit, and the residual variance decreases from `r L1[[4]]` to `r L2[[4]]`, which means that this model is better at explaining variance in uterus weight. The residual plots contains signs of slight arching in the Residual vs. Fitted Values. This suggests that a non-linear approach may be helpful, so we replace the reciprocal of dose 1 with Gaussian kernels on the log of (dose1 + 1/2). We take the log instead of the reciprocal because it reduces the influence of high dosage observations, and it also preserves the order of the observations.
+For this model, the residual plots indicate a better fit, the predictive error improves dramatically, and the residual variance decreases from `r L1[[4]]` to `r L2[[4]]`, which means that this model is better at explaining variance in uterus weight. We also see that the reciprocal transformation of dose 1 improved its Residuals vs. Predictor plot. However, the Residual vs. Fitted Values plot contains signs of slight arching. This suggests that a non-linear approach may be helpful, so we replace the reciprocal of (dose1 + 1/2) with Gaussian kernels on the log of (dose1 + 1/2). We take the log instead of the reciprocal because it reduces the influence of high dosage observations, and it also preserves the order of the observations.
 
 $$
-\text{Tables 10-13: Summary Statistics of Transformed Dose and Transformed Uterus Weight Model}
+\text{Tables 10-13: Summary Statistics of Kernels on Log Dose 1 Model}
 $$
 
 ```{r tab4}
@@ -497,7 +497,7 @@ plot_lmer(m5, dat_train_kern5, parmfrow = c(3,3))
 ```
 
 $$
-\text{Figure 5: Diagnostic Plots of Model with Transformed Dose 1 and Blotted Uterus Weight}
+\text{Figure 5: Diagnostic Plots of Kernels on Log Dose 1 Model}
 $$
 
 
@@ -509,11 +509,11 @@ $$
 kable(errtab)
 ```
 
-Based on the residual plots, this mixed model best satisfies the assumptions of linear regression. However, we note that taking the square root of log(blot) reduces the arching in the residual plot at the cost of slightly lower predictive accuracy on the hold-out sample dataset. Our final kernel model is our best estimator for the blotted uterus weight with reasonable residual plots and predictive error.
+Based on the residual plots, this mixed model with kernels on dose1 best satisfies the assumptions of linear regression. This model is our best fit for the blotted uterus weight with reasonable residual plots, the lowest residual variance, and the lowest predictive error.
 
 ### Results
 
-The figure below takes samples of the random dose 1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose effect curve for each lab.
+The figure below takes samples of the random dose 1 effects (slopes) and lab effects (intercepts) from our final mixed model, holding all other predictors constant, and plots the resulting dose response curve for each lab.
 
 ```{r fig6, fig.height=5, fig.width=6}
 # 
@@ -553,7 +553,7 @@ kable(t(round(lmer_list(m1)[[2]], 4)))
 ```
 
 $$
-\text{Table 6: Mean Random Effects for Transformed Dose Model}
+\text{Table 6: Mean Random Effects for Reciprocal Dose 1 Model}
 $$
 
 ```{r}
@@ -562,7 +562,7 @@ kable(t(round(lmer_list(m2)[[2]], 4)))
 
 
 $$
-\text{Table 11: Mean Random Effects for Transformed Dose and Blotted Uterus Weight Model}
+\text{Table 11: Mean Random Effects for Kernels on Log Dose 1 Model}
 $$
 
 ```{r}
