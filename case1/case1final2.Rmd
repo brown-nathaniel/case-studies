@@ -509,7 +509,7 @@ $$
 kable(errtab)
 ```
 
-Based on the residual plots, this mixed model with kernels on dose 1 best satisfies the assumptions of linear regression. This model is our best fit for the blotted uterus weight with reasonable residual plots, the lowest residual variance, and the lowest predictive error.
+Based on the residual plots, this mixed model with kernels on dose1 best satisfies the assumptions of linear regression. This model is our best fit for the blotted uterus weight with reasonable residual plots, the lowest residual variance, and the lowest predictive error.
 
 ### Results
 
@@ -538,7 +538,7 @@ While our model seems to mostly satisfy the assumptions for regression, the resi
 
 ### Contributions
 
-Nathaniel Brown made the visualizations and tables for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .Rmd file and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped evaluate the models and compile analyses and explanations into a report. Approaches to analysis and implementation of mixed effects models were a joint effort by all members of the group.
+Nathaniel Brown made the visualizations and tables for this report. He also organized the relevant files in a Github repository for the group to access and edit. Annie Tang compiled the group work done on EDA into a .rmd and wrote the accompanying explanations for the EDA and approaches to analysis. William Yang helped evaluate the models and compile analyses and explanations into a report. Approaches to analysis and implementation of mixed effects models were a joint effort by all members of the group.
 
 ### Appendix
 
