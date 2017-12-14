@@ -1,0 +1,875 @@
+---
+title: "Analyzing Rat Bioassays"
+author: "Nathaniel Brown"
+date: "December 14, 2017"
+output:
+  pdf_document: default
+  html_document: default
+  fig_caption: yes
+  word_document: default
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+set.seed(440)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(ggplot2); library(dplyr); library(reshape2); library(knitr); library(R2jags); library(lme4); library(mvtnorm); library(gridExtra); library(mgcv);
+```
+
+```{r}
+dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
+dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
+dat$ldose1 <- log(dat$dose1 + 1/10)
+dat$idose1 <- 1/(dat$dose1 + 1/2)
+dat$lblot <- log(dat$blot)
+dat$labnum <- as.integer(as.factor(dat$lab))
+
+
+ndat <- nrow(dat)
+trainrows <- sample(x=1:ndat, size = ceiling(0.75*ndat))
+testrows <- setdiff(1:ndat, trainrows)
+dat_train <- dat[trainrows,]
+dat_test <- dat[testrows,]
+```
+
+```{r fxns}
+
+expsq <- function(x){
+  exp(x^2)
+}
+
+lmer_list <- function(mod){
+  
+  fixeffmeans <- summary(mod)[["coefficients"]][,1]
+  fixeffsd <- summary(mod)[["coefficients"]][,2]
+
+  randeffmeans <- t(ranef(mod)[["lab"]]) 
+  randeffvar <- diag(summary(mod)[["varcor"]][["lab"]])
+  residsd <- sigma(mod)
+  
+
+  fixefftab <- data.frame(fixeffmeans,fixeffsd^2)
+  names(fixefftab) <- c("mean", "variance")
+
+  residtab <- data.frame(residsd^2)
+  names(residtab) <- c("variance")
+  rownames(residtab) <- c("residual")
+  
+  return(list(fixed = fixefftab, randommeans = randeffmeans, randomvars = randeffvar, residual = residtab))  
+}
+
+format_lmer_list <- function(L = NA){
+
+  colnames(L$fixed) <- c("Mean Fixed Effects", "Variance Fixed Effects")
+  L$randomvars <- data.frame(L$randomvars)
+  colnames(L$randomvars) <- c("Variance Random Effects")
+  colnames(L$residual) <- c("Variance Residuals")
+  L <- lapply(L, round, 4)
+  
+  randmeanslong <- L$randommeans
+  randmeansshort <- randmeanslong[,1:3]
+  randmeansshort <- cbind(randmeansshort, "...")
+  randmeansshort <- cbind(randmeansshort, randmeanslong[,ncol(randmeanslong) - (2:0)])
+  
+  L$randommeans <- randmeansshort
+  
+  return(L)
+}
+
+simdose1curves <- function(mod, nsim = 1000, untrans_y = exp, lab = NA, showoriginaldata = FALSE){
+  
+  #simulated data
+  L <- lmer_list(mod)
+  MEANS <- c(L[["randommeans"]]["(Intercept)", lab], L[["randommeans"]][grep("dose1", rownames(L[["randommeans"]])), lab])
+  
+  COR_full <- attr(VarCorr(mod)[[1]], "correlation")
+
+  dose1ind <- grep("dose1", rownames(COR_full))
+  interind <- grep("Inter", rownames(COR_full))
+  
+  COR <- COR_full[c(interind,dose1ind), c(interind,dose1ind)]
+  sdxy <- prod(attr(VarCorr(mod)[[1]], "stddev")[c(interind,dose1ind)])
+  #cov(x,y) = cor(x,y)*sd(x)sd(y)
+  COV <- COR * sdxy
+  sims <- rmvnorm(nsim, mean = MEANS, sigma = COV)
+  dose1sims <- sims[,2]
+  labsims <- sims[,1]
+  
+  #the first mean is the overall mean from which the others were simulated
+  dose1sims <- c(MEANS[2], dose1sims) 
+  labsims <- c(MEANS[1], labsims)
+  nsim <- nsim + 1
+  
+  #constant data
+  protoeffect <- 0 #just assume baseline protocol
+  dose2 <- 0 
+  dose2trans <- eval(parse(text = grep("dose2", rownames(L$randommeans), value=T))) #in case dose2 needs to be transformed
+  dose2effect <- dose2trans*L$randommeans[grep("dose2", rownames(L$randommeans)), lab]
+  fixedintereffect <- L$fixed["(Intercept)","mean"]
+  protoeffect <- 0 
+  body <- (mean(dat_train$body))
+  bodyeffect <- log(body)*(L$fixed[grep("body", rownames(L$fixed)), "mean"])
+  
+  dose1 <- seq(0,10, 0.1)
+  dose1trans <- eval(parse(text = grep("dose1", rownames(L$randommeans), value=T)))
+  dose1effect <- (apply(t(dose1trans), 2, '*', dose1sims))
+  
+  response <- matrix(untrans_y(fixedintereffect + protoeffect + bodyeffect + dose2effect + labsims + dose1effect), nrow = nsim)
+
+  plot(0,0, type="n", xlim = c(min(dose1), max(dose1)), ylim = c(0,500), xlab = "Dose 1", ylab="Blotted Uterus Weight", main = paste("Dose 1 Response Curve for", lab, "Lab"))
+  for(r in 2:nsim){ #for each simulation...
+    lines(dose1, response[r,], col=rgb(.9,.9,.9))
+  }
+  if(showoriginaldata){
+    points(x=dat$dose1, y=dat$blot)
+  }
+  lines(dose1, response[1,], col="black", lwd=5) #plot the mean line in black
+}
+
+simknotcurves <- function(modlist, protocol="A"){
+  
+  mod <- modlist[["mod"]]
+  # L <- lmer_list(mod)
+  # MEANS <- c(L[["randommeans"]]["(Intercept)", lab], L[["randommeans"]][grep("knot", rownames(L[["randommeans"]])), lab])
+  
+  # COR_full <- attr(VarCorr(mod)[[1]], "correlation")
+  # 
+  # knotinds <- grep("knot", rownames(COR_full))
+  # interind <- grep("Inter", rownames(COR_full))
+  # 
+  # COR <- COR_full[c(interind,knotinds), c(interind,knotinds)]
+  # 
+  # stddev <- attr(VarCorr(mod)[[1]], "stddev")[c(interind, knotinds)]
+  # STDDEV <- apply(t(stddev), 2, '*', stddev)
+  # #cov(x,y) = cor(x,y)*sd(x)sd(y)
+  # COV <- COR * STDDEV
+  # 
+  # sims <- rmvnorm(nsim, mean = MEANS, sigma = COV)
+  # labsims <- sims[,1]
+  # knotsims <- sims[,-1]
+  # knotsims <- rbind(MEANS[-1], knotsims) 
+  # labsims <- c(MEANS[1], labsims)
+  # nsim <- nsim + 1
+  # 
+  # #constant data
+  # protoeffect <- 0 #just assume baseline protocol
+  # dose2 <- 0 
+  # dose2trans <- eval(parse(text = grep("dose2", rownames(L$randommeans), value=T))) #in case dose2 needs to be transformed
+  # dose2effect <- dose2trans*L$randommeans[grep("dose2", rownames(L$randommeans)), lab]
+  # fixedintereffect <- L$fixed["(Intercept)","mean"]
+  # protoeffect <- 0 
+  # body <- (mean(dat_train$body))
+  # bodyeffect <- log(body)*(L$fixed[grep("body", rownames(L$fixed)), "mean"])
+  
+  dose1 <- seq(0,10, 0.1)
+  dose1trans <- log(dose1+1/2)
+  knot_densities <- t(apply((as.matrix(dose1trans)), 1, dnorm, mean=modlist$tau, sd=modlist$s))
+  dose1knots <- apply(knot_densities, 2, '*', dose1trans) 
+  colnames(dose1knots) <- paste0("knot",1:ncol(dose1knots))
+  
+  #get 101 data points (dose1 0-10) for each lab
+  newdat <- NULL
+  for(eachlab in unique(dat$lab)){
+    newdat <- rbind(
+      newdat,
+      cbind(
+        data.frame(
+          lab = eachlab,
+          proto = protocol,
+          dose1 = dose1,
+          dose2 = 0,
+          body = mean(dat$body[dat$proto == protocol]),
+          blot = NA
+        ),
+        dose1knots
+      )
+    )
+  }
+  ggplot(newdat, aes(x=dose1, y=exp(predict(mod, newdat)), color=lab)) + 
+    geom_line() + 
+    labs(title = "Dose 1 Curve by Lab",
+     x = "Dose 1",
+     y = "Blotted Uterus Weight",
+     color = "Lab") + theme(axis.text.x = element_text(hjust=1),
+        plot.title = element_text(hjust = 0.5))
+
+
+  
+  # knotbetas <- L$randommeans[knotinds, lab] #these are the betas for the dose1 effect kernals
+  # knotdensities <- exp(dnorm(x = knotsims, mean = modlist$tau, sd = modlist$s))
+  # 
+  # knoteffects <- as.array(t(knotbetas*t(knotdensities))) #???
+  # dim(knoteffects) <- c(nsim, 1, length(knotinds)) 
+  # 
+  # apply(knoteffects, 1, '*', c(2,2))
+  # 
+  
+
+  
+}
+
+plot_lmer <- function(mod, train = dat_train, parmfrow = NA, untrans_y = exp){
+  
+  if(mean(is.na(parmfrow) > 0)){
+    par(mfrow = c(1,1))
+  }else{
+    par(mfrow = parmfrow)
+  }
+  fitvals <- untrans_y(predict(mod, train))
+  resids <- summary(mod)[["residuals"]]
+
+  plot(fitvals, resids, main = "Residuals vs. Fitted Values", xlab = "Fitted Values", ylab = "Residuals"); abline(h=0)
+  qqnorm(resids, main = "Normal Quantile-Quantile Plot")
+  hist(resids, main = "Histogram of Residuals", xlab="Residuals", col = "gray")
+  
+  continuouseffects <- grep("(dose)|(body)|(knot)", colnames(coef(mod)[[1]]), value=TRUE)
+
+  #for cases when we interact with proto
+  continuouseffects <- gsub(":", "')*", continuouseffects)
+  continuouseffects <- lapply(
+    strsplit(continuouseffects, "proto"),
+    function(l){
+      if(length(l) > 1){
+        return(paste0("(proto=='", l[2]))
+      }
+      return(l)
+    }
+  )
+  X <- apply(as.matrix(continuouseffects), 1,
+        function(x){
+          with(train, eval(parse(text = x)))
+        }
+  )
+  for(c in 1:ncol(X)){
+    if(grepl("proto", continuouseffects[c])){
+      plot(X[,c][X[,c] > 0], resids[X[,c] > 0], main = "Residuals vs. Predictor" , xlab = continuouseffects[c], ylab = "Residuals")
+    }else{
+      plot(X[,c], resids, main = "Residuals vs. Predictor" , xlab = continuouseffects[c], ylab= "Residuals")
+    }
+  }
+  par(mfrow=c(1,1))
+}
+
+
+#root mean squared error penalizes more for extreme error
+rms_err <- function(actual, predicted){
+  error <- actual - predicted
+  return(sqrt(mean((error)^2)))
+}
+ 
+#absolute error weighs all error equally
+abs_err <- function(actual, predicted){
+  error <- actual - predicted
+  mean(abs(error))
+}
+
+compute_errs <- function(mod, test = dat_test, untrans_y = exp){
+  preds <- untrans_y(predict(mod, test))
+  absolute <- abs_err(test$blot, preds) %>% round(4)
+  rootmean <- rms_err(test$blot, preds) %>% round(4)
+  return(list(abs_err = absolute, rms_err = rootmean))
+}
+
+kernel_reg <- function(dat_all = dat, predictor = "ldose1", numknots = NA, s = NA, showplots = FALSE){
+
+  x <- dat_all[[predictor]]
+  if(is.na(numknots)){
+    numknots <- 4
+  }
+  
+  tau <- seq(min(x), max(x), length.out = numknots)
+  
+  if(showplots){
+    plot(dat_all$blot ~ x)
+    abline(v=tau, col="blue")
+  }
+  
+  if(is.na(s)){
+    s <- mean(diff(tau))/2 
+  }
+  
+  X <- array(NA, c(length(x),numknots)) 
+  #get densities of each x according to distribution of each knot  
+  knot_densities <- t(apply((as.matrix(x)), 1, dnorm, mean=tau, sd=s)) 
+  X <- apply(knot_densities, 2, '*', x) 
+  #multiply each x by it's respective knot weighting
+  colnames(X) <- paste0("knot", 1:ncol(X))
+  dat_all <- cbind(dat_all, X)
+  colstr <- paste(colnames(X), collapse=" + ")
+  #eval(parse(text = "colnames(X)"))
+  eval(parse(text = paste("mod <- lmer(log(blot) ~ proto + body + (",colstr," + dose2 + 1|lab), data=dat_all[trainrows,], REML=FALSE)")))
+  
+  return(list(X = X, mod = mod, k = numknots, s = s, tau = tau))
+}
+
+
+```
+
+```{r models, cache=TRUE}
+# RANDOM SLOPE MODEL
+m1 <- lmer(log(blot) ~ proto + body + (dose1 + dose2 + 1|lab), data=dat_train, REML=FALSE)
+
+m2 <- lmer(log(blot) ~ proto + body + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+
+#m3 <- lmer(sqrt(log(blot)) ~ proto + log(body) + (I(1/(dose1+1/2)) + dose2 + 1|lab), data=dat_train, REML=FALSE)
+kernlist5 <- kernel_reg(numknots = 3, showplots=FALSE)
+dat_kern5 <- cbind(dat, kernlist5[[1]])
+dat_train_kern5 <- dat_kern5[trainrows,]
+dat_test_kern5 <- dat_kern5[testrows,]
+m5 <- kernlist5[[2]]
+
+L1 <- lmer_list(m1)
+L2 <- lmer_list(m2)
+#L3 <- lmer_list(m3)
+L5 <- lmer_list(m5)
+
+errs1 <- compute_errs(m1)
+errs2 <- compute_errs(m2)
+#errs3 <- compute_errs(m3, untrans_y=expsq)
+errs5 <- compute_errs(m5, dat_test_kern5)
+
+```
+
+
+
+```{r bayes.clust, include=FALSE}
+{
+bayes.clust <- function(){
+  # N observations
+  for(i in 1:N){
+      
+    #the response, log(blot), has a mixture normal dist
+    lblot[i] ~ dnorm(yclust[i,clust[i]], sig_clust[clust[i]])
+
+  for(h in 1:k){
+    yclust[i,h] <- beta_int[lab[i]]*int[i] +
+                   beta_dose1[lab[i]]*dose1[i] +
+                   beta_dose2[lab[i]]*dose2[i] +
+                   beta_body*body[i] +
+                   beta_protoB*protoB[i] +
+                   beta_protoC*protoC[i] +
+                   beta_protoD*protoD[i] + 
+                   delta_clust[clust[i]]
+
+  }
+    #random intercept and doses, fixed body and proto
+    # y1[i] <- beta_int[lab[i]]*int[i] +
+    #          beta_dose1[lab[i]]*dose1[i] +
+    #          beta_dose2[lab[i]]*dose2[i] +
+    #         # beta_body*body[i] +
+    #         # beta_protoB*protoB[i] +
+    #         # beta_protoC*protoC[i] +
+    #         # beta_protoD*protoD[i] +
+    #         delta_clust[clust[i]]
+    
+  #k-dimensional dirilect dist.
+  clust[i] ~ dcat(pi_clust)
+    
+  }
+  
+  
+  # priors on random intercept and dose effects (they vary by M labs)
+  for(j in 1:M){
+    beta_int[j]    ~ dnorm(beta_int_0,tau_int)
+    beta_dose1[j]  ~ dnorm(beta_dose1_0,tau_dose1)
+    beta_dose2[j]  ~ dnorm(beta_dose2_0,tau_dose2)
+  }
+  
+  #prior cluster means
+  for(h in 1:k){
+    delta_clust[h]  ~ dnorm(0, 0.1)
+    sig_clust[h] ~ dgamma(1, 1)
+    sigma_clust[h] <- sqrt(1/sig_clust[h])
+  }
+
+  # Priors
+  tau_int      ~ dgamma(1,1)
+  tau_dose1    ~ dgamma(1,1)
+  tau_dose2    ~ dgamma(1,1)
+  beta_int_0   ~ dnorm(0, 0.1)
+  beta_dose1_0 ~ dnorm(0, 0.1)
+  beta_dose2_0 ~ dnorm(0, 0.1)
+  beta_body    ~ dnorm(0, 0.1)
+  beta_protoB  ~ dnorm(0, 0.1)
+  beta_protoC  ~ dnorm(0, 0.1)
+  beta_protoD  ~ dnorm(0, 0.1)
+  pi_clust     ~ ddirch(dirpri)
+  
+}
+
+datlist <-  function(dat, k=2){  
+              list(
+                lblot    = dat$lblot,
+                int      = rep(1, nrow(dat)),
+                dose1    = dat$idose1,
+                dose2    = dat$dose2,
+                body     = dat$body,
+                protoB   = as.numeric(dat$proto == "B"),
+                protoC   = as.numeric(dat$proto == "C"),
+                protoD   = as.numeric(dat$proto == "D"),
+                lab      = as.integer(as.factor(dat$lab)),
+                N        = nrow(dat), 
+                M        = n_distinct(dat$lab),
+                clust    = rep(NA, nrow(dat)),#c(1:k, rep(NA, nrow(dat_train)-k)),
+                dirpri   = rep(1/k,k),
+                k        = k
+              )
+}
+
+quants <- as.matrix(c(.25,.50,.75))
+#min, 25%
+temp <- apply(round(quants*nrow(dat_train)),1,function(x){
+  which(order(dat_train$blot) == x)
+})
+indexes <- c(which.min(dat_train$blot), temp, which.max(dat_train$blot))
+
+params2save <- c(
+            "beta_int","beta_dose1", "beta_dose2",
+            "beta_body","beta_protoB","beta_protoC","beta_protoD",
+            "beta_int_0","beta_dose1_0", "beta_dose2_0",
+            "delta_clust", "sigma_clust", "pi_clust"
+            # paste0("clust[",indexes,"]"),
+            # paste0("yclust[",indexes,",1:",k,"]")
+            )
+
+all.clusts <- paste0("clust")
+
+
+}
+
+sim.clust <- jags(data = datlist(dat_train,2), 
+              n.iter = 1000, n.chains = 1, n.burnin = 100,
+              parameters.to.save = params2save,
+              model.file=bayes.clust
+) %>% invisible()
+sim.mcmc <- as.data.frame(as.mcmc(sim.clust)[[1]])
+all_params <- colMeans(sim.mcmc)
+
+params_by_lab <- function(sim.mcmc, dat){
+  all_params <- colMeans(sim.mcmc)
+  fixeffs <- all_params %>% 
+              '['(grepl(x=names(.), pattern="(proto)|(body)")) %>%
+              rep(each=nrow(dat)) %>% matrix(nrow=nrow(dat))
+
+  raneffs <- apply(
+    as.matrix(dat$labnum),1,
+    function(j){
+        all_params %>% '['(grepl(x=names(.), pattern=paste0("\\[",j,"\\]")) &
+                           grepl(x=names(.), pattern="(dose)|(int)"))
+      }) %>% t()
+  
+  colnames(fixeffs) <- c("beta_body", "beta_protoB", "beta_protoC", "beta_protoD")
+  colnames(raneffs) <- c("beta_dose1", "beta_dose2", "beta_int")
+  return(cbind(raneffs, fixeffs))
+}
+
+params_by_clust <- function(sim.mcmc, dat){
+
+  all_params <- colMeans(sim.mcmc)
+  probs <- all_params %>% '['(grepl(x=names(.), pattern=paste0("pi")))
+  clusts <- rmultinom(n=nrow(dat),size=c(1),
+            prob=probs) %>% apply(c(1,2), as.logical) %>% apply(2,which)
+  
+  
+  # given cluster, simulate random delta
+  deltas <- apply(as.matrix(clusts), 1, 
+                  function(h){
+                    all_params[grepl(x=names(all_params), pattern="delta") &
+                               grepl(x=names(all_params), pattern=paste0("\\[",h,"\\]"))]
+                  }) 
+  sigmas <- apply(as.matrix(clusts), 1, 
+                  function(h){
+                    all_params[grepl(x=names(all_params), pattern="sigma") &
+                               grepl(x=names(all_params), pattern=paste0("\\[",h,"\\]"))]
+
+    
+  })
+  return(cbind(deltas, sigmas))
+}
+
+preds.clust <- function(sim.mcmc, dat){
+  
+  # given lab, simulate random (and fixed) parameters
+  ranfixeffs <- params_by_lab(sim.mcmc, dat)
+  
+  # simulate random clusters
+  probz <- all_params %>% '['(grepl(x=names(.), pattern=paste0("pi")))
+  clusts <- rmultinom(n=nrow(dat),size=c(1),
+            prob=probz) %>% apply(c(1,2), as.logical) %>% apply(2,which)
+  
+  
+  # given cluster, simulate random delta
+  clusteff <- params_by_clust(sim.mcmc, dat)
+  shiftz <- 0#rnorm(clusteff[,1], clusteff[,2])
+  
+  # lblot = mu + delta
+  params <- cbind(ranfixeffs, shiftz)
+  
+  design_mat <- model.matrix(log(blot) ~ idose1 + dose2 + body + proto, data=dat) %>% 
+    as.data.frame() %>% mutate(delta = 1) %>%
+    select(idose1, dose2, `(Intercept)`, body, protoB, protoC, protoD, delta) %>% as.matrix()
+  
+  preds <- diag(design_mat %*% t(params))
+  y_hat <- exp(preds + clusteff[,1])
+  return(y_hat)
+}
+
+y_hat6 <- preds.clust(sim.mcmc, dat_test)
+errs6 <- list(abs_err(y_hat6, dat_test$blot), rms_err(y_hat6, dat_test$blot))
+
+```
+
+```{r postpred}
+
+#for s in 1:S
+#  sample mu^s ~ N(mu_blot, 1/sig)
+#  sample y1^s...yn^s ~ N(mu^s, 1/sig); (y1...yn is a whole dataset!)
+#  compute t^s = t(Y^s)
+
+#okay so this is general post pred alg for a norm dist, but how do I sample from gausian mixture???
+
+simclustcurves <- function(sim.mcmc, dat, protocol = "A"){
+  
+  all_params <- colMeans(sim.mcmc)
+  
+  dose1 <- seq(0,10, 0.1)
+  dose1trans <- 1/(dose1+1/2)
+
+  #get 101 data points (dose1 0-10) for each lab
+  newdat <- betas <- deltas <- NULL
+  for(eachlab in unique(dat$labnum)){
+    df <- data.frame(
+        labnum = eachlab,
+        dose1  = dose1trans,
+        dose2  = 0,
+        inter  = 1,
+        body   = mean(dat$body[dat$proto == protocol]),
+        protoB = as.numeric(protocol=="B"),
+        protoC = as.numeric(protocol=="C"),
+        protoD = as.numeric(protocol=="D")
+      )
+    
+    newdat <- rbind(
+      newdat,
+      df
+    )
+    
+    betas <- rbind(
+      betas, 
+      params_by_lab(sim.mcmc, df)
+    )
+    
+    # deltas <- rbind(
+    #   deltas,
+    #   params_by_clust(sim.mcmc, df)
+    # )
+  }
+  deltas <- params_by_clust(sim.mcmc, newdat)
+   
+
+  pred <- diag(as.matrix(newdat[,-1]) %*% t(betas))
+  y_hat <- exp(pred + deltas[,1])
+  
+  labs <- dat %>% select(lab, labnum) %>% unique()
+  newdat2 <- merge(newdat, labs, by=c("labnum"))
+  ggplot(newdat2, aes(x=(1/dose1)-1/2, y=y_hat, color=lab)) + 
+    geom_line() + 
+    labs(title = "Dose 1 Curve by Lab",
+     x = "Dose 1",
+     y = "Blotted Uterus Weight",
+     color = "Lab") + theme(axis.text.x = element_text(hjust=1),
+        plot.title = element_text(hjust = 0.5))
+
+
+
+}
+```
+
+
+```{r}
+errtab <- t(data.frame(a=as.numeric(errs1),b=as.numeric(errs2), c=as.numeric(errs5), 
+                       d=as.numeric(errs6)))
+colnames(errtab) <- c("MAE","RMSE")
+rownames(errtab) <- c("Mixed Effects", "Mixed Effects, Transformed Dose 1", "Mixed Effects, Kernels on Log Dose 1", "Gaussian Mixture")
+```
+
+# Introduction
+
+  In this report, we analyze data from an international validation study to measure the effectiveness of a rat uterotrophic bioassay. The bioassay we are studying measures the estrogenic effect of certain chemicals. The two chemicals used in this study (referred to using "Dose 1" and "Dose 2" in this paper) have well-known effects, so we will try to verify that the bioassay produces consistent results in rats that have been administered various amounts Dose 1. If the uterotrophic bioassay is an effective procedure for measuring the effects of these chemicals, then we expect to see consistent responses to various dosages across all labs.
+
+The variables in this dataset are listed and described in the table below:
+
+```{r}
+
+namez <- names(dat_train)[1:8]
+typez <- c("categorical (19 levels)", "categorical (4 levels)", "categorical (11 levels)", "continuous", "continuous", "continuous", "continuous", "continuous")
+descz <- c("lab where bioassay was administered",
+           "protocol of the bioassay",
+           "label for combination of dosage levels",
+           "amount of Dose 1 that the rat receives",
+           "amount of Dose 2 that the rat receives",
+           "body weight of the rat",
+           "wet uterus weight",
+           "blotted utuerus weight (response)")
+vartab <- matrix(c(namez,typez,descz), ncol=3)
+colnames(vartab) <- c("Name", "Type", "Description")
+kable(vartab)
+
+```
+
+$$
+\text{Table 1: Description of the Dataset}
+$$
+
+
+# Methods
+
+  To measure the consistency of the responses, we fit a Bayesian hierarchichal model with a Gaussian mixture response. The model has random effects on Dose 1, Dose 2, and the intercept, which all vary by lab. Using one-fold cross validation, we compare this model's predictive error to that of previous models used in this analysis. Finally, we analyze between-lab variability using a visualization of the random effects. To create this visualization, we hold the other predictors constant (at the baseline protocol "A", a Dose 2 level of 0, and a body weight equal to the mean body weight of rats within the protocol). We then draw samples of the random intercept and Dose 1 effect from the model, and plot the results of blotted uterus weight by the amount of Dose 1.
+
+# Exploratory Data Analysis
+
+
+```{r fig1, fig.height=5, fig.width=15, warning=FALSE}
+
+graph1 <- ggplot(data=dat,aes(x=dose1,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="Dose 1", y="log(blotted uterus weight)", title="Dose 1 vs. log(blotted uterus weight)") + theme(plot.title = element_text(hjust = 0.5))
+graph2 <- ggplot(data=dat,aes(x=dose2,y=log(blot),color=lab)) + geom_point() + geom_line() + labs(x="Dose 2", y="log(blotted uterus weight)", title="Dose 2 vs. log(blotted uterus weight)") + theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange( graph1, graph2, ncol=2)
+```
+
+$$
+\text{Fig. 1: Lab-to-Lab Variability in Intercepts and Slopes}
+$$
+This plot depicts why we added random effects on the intercept and the dosage variables. The slopes of the dosage effects and their starting points all vary by the lab in which the bioassay is administered.
+
+```{r}
+ggplot(data=dat, aes(x=lblot)) + 
+  geom_histogram(fill="blue") + 
+  labs(x="log(blotted uterus weight)", y="Frequency", title="Distribution of Response Variable") + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+$$
+\text{Fig. 2: Non-Gaussian Distribution of Response}
+$$
+
+This image shows that the response variable (log blotted uterus weight) is not normally distributed, which is what most of our previous approaches assumed. To fit this data, we use JAGS to build a Gaussian mixture model with two clusters. The residual diagnostic plots for this model can be found in Appendix 2.
+
+# Previous Results
+
+```{r}
+kable(errtab)
+```
+
+$$
+\text{Table 2: Predictive Errors of All Models}
+$$
+
+According to predictive accuracy on a single hold-out sample, our new Bayesian model is not our best-fitting model, but the performance is fairly close to our other ones. Therefore, we will continue with our analysis of between-lab variablility.
+
+
+```{r fig3, fig.height=5, fig.width=6}
+simknotcurves(kernlist5)
+```
+
+$$
+\text{Fig. 3: Dose 1 Response Curves for Each Lab from Kernel Model}
+$$
+The figure above is the final result of our previous analysis of rat bioassays using the kernel model. To make it, we take samples of the random Dose 1 effects (slopes) and lab effects (intercepts) from our best-fitting model, holding all other predictors constant, and plot the resulting dose response curve for each lab. From this plot, we drew the conclusion that the trends between labs were not homogenous enough, and we did not recommend this bioassay procedure as a method for consistently measuring the estrogenic effects of chemicals in rats. For our new clustered model, we recreate the same plot and interpret it in the next section.
+
+# Analysis of Between-Lab Variability
+
+```{r fig4, fig.height=5, fig.width=6}
+gA <- simclustcurves(sim.mcmc, dat, protocol="A")
+# gB <- simclustcurves(sim.mcmc, dat, protocol="B")
+# gC <- simclustcurves(sim.mcmc, dat, protocol="C")
+# gD <- simclustcurves(sim.mcmc, dat, protocol="D")
+
+# grid.arrange(gA, gB, gC, gD, ncol=2)
+gA
+```
+
+$$
+\text{Fig. 4: Dose 1 Response Curves for Each Lab from Cluster Model}
+$$
+
+Both the cluster and the kernel models show similar shapes of the simulated Dose 1 response curves. However, two main differences between the output of the two models is that the cluster model has less variation between lab intercepts, and the simulated lines are not smooth. The oscillating behavior that we observe in the lines is a result of the clusters on the response variable.
+
+# Discussion
+
+In our previous analysis, we concluded that there was too much variability between the curves, and therefore we could not claim that the Dose 1 effect is consistent between labs. The lines were too spread apart, and one lab even showed a decreasing effect of Dose 1 on blotted uterus weight. In our mixture model, however, the trends are much more consistent. The intercepts are closer together, and all of the lines move in generally the same direction. Despite this, the spread between the uterus weights for high dosages is too high for us to conclude that the effecs of Dose 1 are homogenous between labs. 
+
+# Appendix
+
+## 1) Random Effects on Each Lab in Cluster Model:
+
+```{r}
+all_labs <- dat %>% 
+            select(lab, labnum) %>% 
+            unique()
+
+all_quants <- sim.mcmc %>% 
+              select(grep(x=colnames(.), pattern="(int\\[)|(dose1\\[)|(dose2\\[)")) %>%
+              apply(2, quantile, c(.025, .5, .975)) %>%
+              t() %>%
+              as.data.frame() %>%
+              #rowwise() %>%
+              mutate(name = rownames(.)) %>% 
+              rowwise() %>% 
+              mutate(
+                openbrack  = grepRaw(x=name, pattern="\\[", all=TRUE),
+                closebrack = grepRaw(x=name, pattern="\\]", all=TRUE),
+                param      = substr(name, 0, openbrack-1),
+                labnum        = substr(name, openbrack+1, closebrack-1)
+              ) %>% 
+              as.data.frame() %>%
+              select(-openbrack, -closebrack, -name,
+                     lower = `2.5%`, estimate = `50%`, upper = `97.5%`)
+
+paramtab <- merge(all_labs, all_quants, by="labnum")
+paramtab_int <- paramtab %>%
+  filter(param == "beta_int") %>% 
+  select(lab, lower, estimate, upper) 
+paramtab_dose1  <- paramtab %>% 
+  filter(param == "beta_dose1") %>% 
+  select(lab, lower, estimate, upper) 
+paramtab_dose2  <- paramtab %>% 
+  filter(param == "beta_dose2") %>% 
+  select(lab, lower, estimate, upper) 
+
+kable(paramtab_int)
+```
+
+$$
+\text{Table 3: Random Intercepts from Cluster Model}
+$$
+
+```{r}
+kable(paramtab_dose1)
+```
+
+$$
+\text{Table 4: Random Dose 1 Effects from Cluster Model}
+$$
+
+
+```{r}
+kable(paramtab_dose2)
+```
+
+$$
+\text{Table 5: Random Dose 2 Effects from Cluster Model}
+$$
+
+## 2) Diagnostic Plots of Cluster Model
+
+```{r, fig5, fig.height=4.5, fig.width=6}
+fitvals <- log(preds.clust(sim.mcmc, dat_train))
+resids <- dat_train$lblot - fitvals
+plot(fitvals, resids, 
+     main = "Residuals vs. Fitted Values in Clustered Model",
+     xlab = "Fitted Values", ylab = "Residuals")
+abline(h=0, col="red")
+
+qqnorm(resids)
+
+hist(resids, 
+     main = "Histogram of Residuals",
+     xlab = "Residuals")
+
+plot(dat_train$idose1, resids,
+     main = "Residuals vs Predictor: Reciprocal of Dose 1",
+     xlab = "Reciprocal of Dose 1", ylab = "Residuals")
+
+plot(dat_train$dose2, resids,
+     main = "Residuals vs Predictor: Dose 2",
+     xlab = "Dose 2", ylab = "Residuals")
+
+plot(dat_train$body, resids,
+     main = "Residuals vs Predictor: Body Weight",
+     xlab = "Body Weight", ylab = "Residuals")
+
+```
+
+$$
+\text{Fig. 5-10: Diagnostic Plots of Cluster Model}
+$$
+<!--
+
+https://www2.stat.duke.edu/courses/Fall10/sta290/Lectures/Mixture/Gibbs.pdf
+
+## 3) Detailes of Bayesian Clustered Model
+
+In this MCMC description, $i$ is the individual index, $j$ is the lab index, and $k$ is the cluster index
+
+$$
+y_i \sim N(\mu_j + \delta_k, \sigma_j^2)
+\\
+\mu_j \sim N(X\beta, 
+$$
+
+bayes.clust <- function(){
+  # N observations
+  for(i in 1:N){
+      
+    #the response, log(blot), has a mixture normal dist
+    lblot[i] ~ dnorm(yclust[i,clust[i]], sig_clust[clust[i]])
+
+  for(h in 1:k){
+    yclust[i,h] <- beta_int[lab[i]]*int[i] +
+                   beta_dose1[lab[i]]*dose1[i] +
+                   beta_dose2[lab[i]]*dose2[i] +
+                   beta_body*body[i] +
+                   beta_protoB*protoB[i] +
+                   beta_protoC*protoC[i] +
+                   beta_protoD*protoD[i] + 
+                   delta_clust[clust[i]]
+
+  }
+    #random intercept and doses, fixed body and proto
+    # y1[i] <- beta_int[lab[i]]*int[i] +
+    #          beta_dose1[lab[i]]*dose1[i] +
+    #          beta_dose2[lab[i]]*dose2[i] +
+    #         # beta_body*body[i] +
+    #         # beta_protoB*protoB[i] +
+    #         # beta_protoC*protoC[i] +
+    #         # beta_protoD*protoD[i] +
+    #         delta_clust[clust[i]]
+    
+  #k-dimensional dirilect dist.
+  clust[i] ~ dcat(pi_clust)
+    
+  }
+  
+  
+  # priors on random intercept and dose effects (they vary by M labs)
+  for(j in 1:M){
+    beta_int[j]    ~ dnorm(beta_int_0,tau_int)
+    beta_dose1[j]  ~ dnorm(beta_dose1_0,tau_dose1)
+    beta_dose2[j]  ~ dnorm(beta_dose2_0,tau_dose2)
+  }
+  
+  #prior cluster means
+  for(h in 1:k){
+    delta_clust[h]  ~ dnorm(0, 0.1)
+    sig_clust[h] ~ dgamma(1, 1)
+    sigma_clust[h] <- sqrt(1/sig_clust[h])
+  }
+
+  # Priors
+  tau_int      ~ dgamma(1,1)
+  tau_dose1    ~ dgamma(1,1)
+  tau_dose2    ~ dgamma(1,1)
+  beta_int_0   ~ dnorm(0, 0.1)
+  beta_dose1_0 ~ dnorm(0, 0.1)
+  beta_dose2_0 ~ dnorm(0, 0.1)
+  beta_body    ~ dnorm(0, 0.1)
+  beta_protoB  ~ dnorm(0, 0.1)
+  beta_protoC  ~ dnorm(0, 0.1)
+  beta_protoD  ~ dnorm(0, 0.1)
+  pi_clust     ~ ddirch(dirpri)
+  
+}
+
+-->
+
+

@@ -1,0 +1,83 @@
+---
+title: "Analyzing Rat Bioassays"
+author: "Nathaniel Brown"
+date: "November 29, 2017"
+output:
+  beamer_presentation: default
+  ioslides_presentation: default
+  slidy_presentation: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE)
+library(knitr); library(dplyr)
+```
+
+## The Data
+
+```{r data, fig.width=3}
+dat <- read.table("alllabs.txt", header = TRUE, stringsAsFactors = FALSE, na.strings = ".")
+dat <- dat[!(is.na(dat$blot) | is.na(dat$body)),]
+ndat <- nrow(dat)
+trainrows <- sample(x=1:ndat, size = ceiling(0.75*ndat))
+testrows <- setdiff(1:ndat, trainrows)
+dat_train <- dat[trainrows,]
+dat_test <- dat[testrows,]
+
+namez <- names(dat_train)
+typez <- c("categorical (19 levels)", "categorical (4 levels)", "categorical (11 levels)", "continuous", "continuous", "continuous", "continuous", "continuous")
+descz <- c("lab where bioassay was administered",
+           "protocol of the bioassay",
+           "label for combination of dosage levels",
+           "amount of dose 1 that the rat receives",
+           "amount of dose 2 that the rat receives",
+           "body weight of the rat",
+           "wet uterus weight",
+           "blotted utuerus weight (response)")
+tab <- matrix(c(namez,typez,descz), ncol=3)
+colnames(tab) <- rep("", ncol(tab))
+kable(tab)
+#pander(tab,split.cells=c("10%","15%","75%"))
+```
+
+## Previous Approaches
+
+* Mixed-effects model (random intercept and dose 1 effect by lab)
+* Kernel Regression (kernels on smoothed dose 1)
+
+
+Both of these approaches assume a normally-distributed response.
+
+## Current Approach
+
+```{r plots, fig.height=2.7,fig.width=4}
+lblot <- log(dat$blot)
+sub <- dat$proto == "A"
+hist(lblot[sub], prob=TRUE, xlab="log(blotted weight)", main="Histogram of log(blotted weight)", cex.main=0.75, cex.lab=0.75)
+lines(density(lblot[sub]))
+```
+
+* Not normally distributed
+* Mixture of Gaussians
+
+## Current Approach (cont.)
+
+* Fit model using model-based clustering in JAGS
+* Predict blotted uterus weight
+* Check results using cross validation and posterior predictive checks
+
+<!--
+## Progress so far
+
+* Model setup:
+
+$(\pi_1, ..., \pi_k) \sim \text{Dir}(\frac{1}{k}, ..., \frac{1}{k})$
+
+$c_i \sim \text{Multinom}(1, (\pi_1, ..., \pi_k))$
+
+$\mu \sim N(0, 1 \times 10^6)$
+
+$\sigma_i^2 \sim \text{InvGamma}(1 \times 10^{\text{-}3}, 1 \times 10^{\text{-}3})$
+
+$y_i | \mu, \sigma^2, c_i \sim N(\mu_{c_i}, \sigma^2_{c_i})$
+-->

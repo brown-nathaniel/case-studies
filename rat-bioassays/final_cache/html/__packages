@@ -1,0 +1,14 @@
+base
+ggplot2
+dplyr
+reshape2
+knitr
+coda
+rjags
+R2jags
+Matrix
+lme4
+mvtnorm
+gridExtra
+nlme
+mgcv

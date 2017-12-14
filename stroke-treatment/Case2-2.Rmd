@@ -1,0 +1,317 @@
+---
+title: "Case Study 2, Pt. 2"
+author: "Nathaniel Brown, In Hee Ho, Sarah Zimmermann"
+date: "October 18, 2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE}
+set.seed(440)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message=FALSE)
+library(knitr)
+library(ggplot2)
+library(survival)
+library(gridExtra)
+library(dplyr)
+library(survminer)
+library(reshape2)
+library(glmnet)
+library(arm)
+```
+
+```{r}
+dat <- read.table("kellydat.txt", header=T)
+dat$race = "Other"
+dat$race[dat$black==1|dat$hisp==1 ]="Black or Hispanic"
+dat$gender = "male"
+dat$gender[dat$male==0]="female"
+dat$symptom = "0"
+dat$symptom[dat$sn1==1]="1"
+dat$symptom[dat$sn2==1]="2"
+dat$symptom[dat$sn3==1|dat$all4==1]="3+"
+dat$scan="not scanned"
+dat$scan[dat$fail==1]="scanned"
+dat = dat %>% group_by(race) %>% mutate(racescan = ifelse(fail == 1, mean(fail), 1-mean(fail)))
+dat = dat %>% group_by(symptom) %>% mutate(symptomscan = ifelse(fail == 1, mean(fail), 1-mean(fail)))
+dat = dat %>% group_by(gender) %>% mutate(genderscan = ifelse(fail == 1, mean(fail), 1-mean(fail))) %>% as.data.frame()
+```
+
+
+## Introduction
+
+The data are from a study of time to critical neurological assessment for patients with stroke-like symptoms who are admitted to the emergency room. We are interested in the factors predictive of the time to assessment following admission to the ED for n=335 patients with mild to moderate motor impairment. The goal of the analysis is to perform inferences on the impact of clinical presentation, gender, and race (Black, Hispanic, and others) on time to neurological assessment, where clinical presentation is measured as the number of the four major stroke symptoms: headache, loss of motor skills or weakness, trouble talking or understanding, and vision problems. However, as discussed in our previous report, we group Blacks and Hispanics together, and number of symptoms of 3 and 4 together, due to their small sample size. 
+
+
+This report includes initial results for 2 different methods that were considered to analyze the data: Cox Proportional Hazard and Logistic Regression. There is analysis on model diagnostics, results, and problems which arise in the models. To conclude we assess the effectiveness of the work and steps to improve analysis for next week. 
+
+## Kaplan-Meier Analysis 
+
+We first look at the overall survival curve. The curve below shows the time the entire population -- regardless of race, gender, or clinical condition -- will wait for the examination, as well as its 95% confidence interval.  
+
+```{r, kmtotal}
+dat.KM <- survfit(Surv(nctdel, fail) ~ 1, data = dat) #estimated survival curve 
+
+plot(dat.KM, main=expression(paste("Kaplan-Meier Estimate ", hat(S)(t), " with CI")),
+     xlab="t", ylab="Survival", lwd=2)
+```
+
+```{r, kmrace, fig.height=3,fig.align='center'}
+
+par(mfrow=c(1,3))
+dat.KM.race <- survfit(Surv(nctdel, fail) ~ race, type="kaplan-meier", conf.type="log", data=dat)
+
+plot(dat.KM.race, main=expression(paste("KM-Est ", hat(S)[g](t), " for Race")),
+     xlab="t", ylab="Survival", lwd=2, col=1:3, cex.main=0.9)
+legend(x="topright", col=1:2, lwd=2, legend=c("Black/Hisp", "Other"))
+
+dat.KM.gender <- survfit(Surv(nctdel, fail) ~ male, type="kaplan-meier", conf.type="log", data=dat)
+
+plot(dat.KM.gender, main=expression(paste("KM-Est ", hat(S)[g](t), " for Gender")),
+     xlab="t", ylab="Survival", lwd=2, col=1:2, cex.main=0.9)
+legend(x="topright", col=1:2, lwd=2, legend=c("male", "female"))
+
+dat.KM.symptom <- survfit(Surv(nctdel, fail) ~ symptom, type="kaplan-meier", conf.type="log", data=dat)
+
+plot(dat.KM.symptom, main=expression(paste("KM-Est ", hat(S)[g](t), " for Clinical Presentation")),
+     xlab="t", ylab="Survival", lwd=2, col=1:4, cex.main=0.9)
+legend(x="topright", col=1:4, lwd=2, legend=c("0", "1", "2", "3+"))
+
+
+```
+
+We now look at the separate estimated survival curves for different groups. From our Kaplan-Meier estimates for three different variables (race, gender, and the number of major stroke symptoms a patient shows), we observe that the survival curves are generally similar between 0-5 minute time range. However, thereappears a difference between the estimated survival curves for different number of symptoms a patient shows; specifically, people showing more symptoms tend to wait a shorter amount of time for their treatment. Overall, the survival curves are proportional, which is a key assumption to fit a Cox Proportional Hazard model.
+
+## Cox Proportional Hazard Model
+
+Cox regression looks into the effects of variables upon the event in the data set, which in this case is a CT scan. This model assumes that the effects of the predictor variables upon survival are constant over time and are additive in one scale. We fit the Cox proportional hazard models for waiting time until the event (CT scan) based on three variables: gender (female vs. male), race (Black or Hispanic vs. non-Black and non-Hispanic), and number of symptoms (0, 1, 2, or 3+). 
+<!--
+####Model
+-->
+```{r}
+fitCPH_all<- coxph(Surv(nctdel, fail) ~ gender+race+symptom, data=dat)
+```
+
+
+####Diagnostics
+
+Before moving on to analysis, we first check that our data satisfies the proportional hazard model assumptions. To do this, we investigate the residuals and look for any influential points. 
+
+
+```{r, fig.height=3,fig.width=4.5,fig.align='center'}
+ggcoxdiagnostics(fitCPH_all, type = "deviance",
+                 linear.predictions = FALSE, ggtheme = theme_bw(), main= "Residuals.") #residuals
+```
+
+The residual plot shows no apparent pattern. The points are generally evenly spread above and below 0.
+
+
+```{r}
+ggcoxdiagnostics(fitCPH_all, type = "dfbeta",
+                 linear.predictions = FALSE, ggtheme = theme_bw(),  main="Influential Points")#influential points
+```
+
+Next, we investigate the influential points. For gender, although there are a few points close to or above $\pm$ 0.025, all of the points are below 0.05 so we do not consider any of the points as influential. For race/ethnicity, there are points as high as 0.04, but since there are no points above/below 0.05, we do not consider any of the points to be influential. However, for clinical presentation (0, 1, 2 or 3+ symptoms), we observe thatthere are points as high as or higher than 0.05. We thus acknowledge that there are some points that can potentially affect the fit of the model.
+
+
+```{r}
+kable(data.frame(cox.zph(fitCPH_all)[[1]]))
+```
+
+Finally, we check the assumption of proportional hazard using the cox.zph() function. Because none of the p-values for the covariates are singificant (i.e. none of the p-values greater than 0.05), we can assume the hazards are proportional.
+
+Since all of the assumptions of the Cox Proportional Hazard model are met, we now continue on to the actual model. 
+
+####Results 
+
+We are 95% confident that the wait time until scan for a male patient is 0.6790 to 1.092 minutes longer than that of a female patient, if all else are held confident. Also, with 95% confidence level, we say that a non-black and non-hispanic patient waits for the examination 0.9052 to 1.527 minutes longer than a black or hispanic patient, with all other factors held constant. We are 95% confident that a patient who shows two of four major stroke symptoms will wait 0.8587 to 1.644 minutes longer than a patient with no notable symptoms, and that a patient with three or more symptoms will wait 0.8949 to 2.330 minutes longer for the neurological/CT scan than a patient with no symptoms.
+
+
+We note three things. First, that the 95% confidence interval contains 0 suggests there is no significant gender, race, or clinical presentation bias. Also, none of the variables are significant predictors in the model, which supports the idea that the wait response time is not influenced by gender, race, or clinical presentation. Finally, the R-squared value of 0.016 implies that only 1.6% of the variance is explained in the model. The summary statistics are presented below.
+
+
+```{r}
+summary(fitCPH_all)
+```
+
+
+## Logistic Regression
+
+```{r logit}
+
+lower_bound <- function(x, bounds){
+  ret <- rep(NA, length(x))
+  for(i in 1:length(x)){
+    xi <- x[i]
+    found <- (which(xi >= c(-Inf, bounds) & (xi <= c(bounds, Inf))))[1] - 1
+    if(found==0){found<-1}
+    ret[i] <- bounds[found]
+  }
+  return(ret)
+}
+
+de_logit <- function(logodds){
+  o <- exp(logodds)
+  p <- o/(1+o)
+  return(p)
+}
+bounds <- 0:5
+
+dat$timecat <- as.integer(as.factor(lower_bound(dat$nctdel, bounds)))
+dat$personid <- 1:nrow(dat)
+datcat <- merge(dat$personid, bounds) %>% 
+          mutate(personid=x, timecat=as.integer(as.factor(y))) %>%
+            #take all unique combinations of people and time categories
+          merge(dat, by=c("personid", "timecat"), all=TRUE) %>%
+          mutate(fail = ifelse(is.na(fail), 0, fail)) %>%
+            #add fail column
+          group_by(personid) %>%
+          mutate(maxtimecat = (timecat)[!is.na(nctdel)],
+                 atrisk = (timecat <= maxtimecat)) %>%
+          filter(atrisk) %>%
+            #for each person, identify rows where persons are not at risk (after they fail/drop out), and remove those rows
+          dplyr::select(personid, timecat, fail) %>%
+          as.data.frame()
+
+#code to add predictors of race, gender, and number of symptoms
+datcat <- merge(datcat, dat, by="personid", all=T) %>% 
+          mutate(symptom0 = ifelse(symptom == 0, 1, 0),
+                 symptom1 = ifelse(symptom == 1, 1, 0),
+                 symptom2 = ifelse(symptom == 2, 1, 0),
+                 raceother = ifelse(race == "Other", 1, 0), 
+                 male = ifelse(gender == "male", 1, 0), 
+                 personid = as.integer(personid), 
+                 timecat = as.integer(timecat.x), 
+                 fail = as.integer(fail.x)) %>% 
+          dplyr::select(personid, timecat = timecat, fail = fail, symptom0, symptom1, symptom2, raceother, male)
+
+#code to add indicator effects of every timeunit
+Xmat <- array(0, c(nrow(datcat), length(bounds)))
+# previd <- NA
+# changes <- c(diff(datcat$personid), 1) #a 1 marks the final index of each personid
+# counts <- data.frame(x = datcat$personid) %>% group_by(x) %>% mutate(n=n()) %>% '[['("n")
+
+for(r in 1:nrow(datcat)){
+  Xmat[r,datcat$timecat[r]] <- 1
+}
+
+colnames(Xmat) <- paste0("X",1:ncol(Xmat))
+
+
+datcat_X <- (cbind((datcat), Xmat))
+
+nullmod <- glm(fail ~ 1, data=datcat_X, family="binomial")
+
+logistic_diagnostics <- function(mod=NA, ydat=y, Xdat=X){
+  
+  if(class(mod) == "cv.glmnet"){
+    fitvals <- predict.cv.glmnet(mod, newx = Xdat, s="lambda.min")
+  }else{
+    fitvals <- predict.glm(mod, newdata=data.frame(Xdat))
+  }
+  p_hat <- de_logit(fitvals)
+  resids_p <- (ydat-p_hat)/(sqrt(p_hat*(1-p_hat)))
+  s <- ydat; s[ydat==0] <- -1
+  resids_d <- s*sqrt(-2*(ydat*log(p_hat) + (1-ydat)*log(1-p_hat)))
+  resids_p_stat <- sum(resids_p^2)
+  resids_d_stat <- -2*sum(ydat*log(p_hat) + (1-ydat)*log(1-p_hat))
+  p <- sum(as.matrix(coef(mod)) != 0)
+  dof <- nrow(Xdat)-p
+  return(list(p_hat = p_hat, resids_p=resids_p, resids_p_stat=resids_p_stat, resids_d=resids_d, resids_d_stat=resids_d_stat, dof=dof))
+}
+
+indepcols <- which(!colnames(datcat_X) %in% c("fail", "personid", "timecat"))
+X <- as.matrix(datcat_X[,indepcols])
+y <- datcat_X$fail
+
+#0 means no incercept
+logmod <- glm(y ~ 0 + ., family="binomial", data = as.data.frame(cbind(y,X)))
+logmod_stats <- logistic_diagnostics(logmod)
+logmodtest <- pchisq(logmod$deviance, logmod$df.residual, lower=FALSE)
+
+lassomod <- cv.glmnet(y=y, x = X, family="binomial", type.measure="class", alpha = 1, intercept=FALSE)
+lassomod_stats <- logistic_diagnostics(lassomod)
+lassomodtest <- pchisq(lassomod_stats$resids_d_stat, lassomod_stats$dof, lower=FALSE)
+
+ridgemod <- cv.glmnet(y=y, x = X, family="binomial", type.measure="class", alpha = 0,intercept=FALSE)
+ridgemod_stats <- logistic_diagnostics(ridgemod)
+ridgemodtest <- pchisq(ridgemod_stats$resids_d_stat, ridgemod_stats$dof, lower=FALSE)
+```
+
+
+To perform logistic regression on the data, we categorize the time-to-event variable into groups of 1 minute, with all events occuring after 5 minutes grouped together, since the sample size is low after 5 minutese, with only `r sum(dat$nctdel > 5)` observations. Our predictors consist of these time categories, as well as the aforementioned categories of race, gender, and clinical presentation. The binned residual plots, deviance test results, and coefficients are reported below. We attempt three approaches to logistic regresion: Ordinary Least Squares (OLS), LASSO, and Ridge. The `glmnet` package does not provide standard errors for its coefficients, so we cannot report confidence intervals for the estimates.
+
+```{r}
+#evaluating deviance of models. small p-value = lack of fit
+#par((mfrow = c(3,1)))
+
+stats <- summary(logmod)$coefficients
+xbar <- stats[,1]
+sigma <- stats[,2]
+logmodcoef <- xbar + 1.96*cbind(-sigma, sigma)
+logmodcoef <- round(logmodcoef,4)
+colnames(logmodcoef) <- c("Lower", "Upper")
+binnedplot(x=logmod$fitted.values, y=logmod_stats$resids_d, main = "OLS Logistic Regression Binned Residuals", ylab = "Deviance Residuals", xlab = "Fitted Values", nclass = 50)
+```
+
+```{r}
+lassomodcoef <- round(as.matrix(coef(lassomod)),4)
+colnames(lassomodcoef) <- "LASSO Estimate"
+binnedplot(x=lassomod_stats$p_hat, y=lassomod_stats$resids_d, main = "LASSO Logistic Regression Binned Residuals", ylab = "Deviance Residuals", xlab = "Fitted Values", nclass = 50)
+```
+```{r}
+ridgemodcoef <- round(as.matrix(coef(ridgemod)),4)
+colnames(ridgemodcoef) <- "Ridge Estimate"
+binnedplot(x=ridgemod_stats$p_hat, y=ridgemod_stats$resids_d, main = "Ridge Logistic Regression Binned Residuals", ylab = "Deviance Residuals", xlab = "Fitted Values", nclass = 50)
+```
+
+```{r}
+d <- round(matrix(c(logmodtest, lassomodtest, ridgemodtest)),4)
+colnames(d) <- "Deviance p-value"
+rownames(d) <- c("OLS", "LASSO Penalty", "Ridge Penalty")
+
+kable(d)
+kable(logmodcoef)
+kable(lassomodcoef)
+kable(ridgemodcoef)
+
+```
+
+\pagebreak
+All three of our logistic regression approaches---OLS, LASSO, and Ridge---do not find much difference between these groups. In the OLS model, the only coefficients that do not contain zero in their 95% confidence interval are `r names(which(!(logmodcoef[,1] < 0 & logmodcoef[,2] > 0))) %>% paste(collapse = " and ")`. In the LASSO and Ridge models, the majority of coefficients are close to zero or exactly zero, and all of the models fit the data poorly according to the deviance test. The residual plots also suggest a poor fit for all the models other than the OLS model. Therefore, we cannot confidently claim that any of these factors are predictive of the time to assessment.
+
+## Discussion
+
+The models we build for this analysis do not fit the data well. This can be due to a relatively small sample size of `r nrow(dat)` patients, or the possibility that there is no measurable difference between races, genders, and clinical presentation in time to treatment. In future analysis, we will attempt to fit more flexible models, such as generalized additive models with kernel smoothing.
+
+
+## Contributions
+
+Nathaniel built the logistic regression model and the supporting visualizations and summary statistics. Sarah built and analyzed the Cox Proportional Hazard model and Kaplan Meier anlysis. Inhee edited and added to the report.
+
+
+
+##References
+
+http://influentialpoints.com/Training/coxs_proportional_hazards_modression_model-principles-properties-assumptions.htm#modmch
+
+
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3059453/
+
+
+http://dwoll.de/rexrepos/posts/survivalKM.html
+
+http://www.sthda.com/english/wiki/cox-model-assumptions 
+
+
+<!--
+These are the assumptions for Cox regression according to the link: 
+
+1.    The mechanisms giving rise to censoring of individuals must not be related to the probability of an event occurring. This assumption is known as non-informative censoring and applies for nearly all forms of survival analysis.
+
+2.    Survival curves for different strata must have hazard functions that are proportional over time. This is the proportional hazards assumption discussed above for a single explanatory variable and for the multivariate model.
+
+3.    There should be a linear relationship between the log hazard and each covariate. This is best checked using residual plots
+
+-->

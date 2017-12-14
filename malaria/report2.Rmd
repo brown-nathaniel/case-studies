@@ -1,0 +1,214 @@
+---
+title: "report2"
+author: "Nathaniel Brown, Huijia Yu, Angie Shen"
+date: "November 6, 2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message=FALSE)
+library(reshape2)
+library(ggplot2)
+library(dplyr)
+library(mice)
+library(micemd)
+library(VIM)
+library(knitr)
+library(caret)
+```
+
+# Introduction
+
+We are interested in predicting whether malaria parasites will be found in a child's blood based on his/her age, bednet use, the amount of greenery in his/her village, and the presence of a health clinic. However, almost 40% of the observations do not have bednet use reported, so removing those observations would cause us to lose too much information. Instead, we will impute bednet values to predict the outcome.
+
+
+```{r}
+dat <- read.csv("gambiaMissing.csv")
+dat$Y = factor(dat$Y)
+dat$BEDNET = factor(dat$BEDNET)
+dat$PHC = factor(dat$PHC)
+dat$GREEN = factor(as.character(formatC(dat$GREEN, format='f', digits=2)))
+
+```
+
+
+# Exploratory Data Analysis
+
+In the graphs below, we illustrate the frequency of each category within each the dataset:
+
+```{r, fig.height=2, fig.width=3}
+ylabel <- dat %>% group_by(Y) %>% summarize(n=n()) %>% '[['(2) %>% as.numeric()
+agelabel <- dat %>% group_by(AGE) %>% summarize(n=n()) %>% '[['(2) %>% as.numeric()
+bednetlabel <- dat %>% group_by(BEDNET) %>% summarize(n=n()) %>% '[['(2) %>% as.numeric()
+greenlabel <- dat %>% group_by(GREEN) %>% summarize(n=n()) %>% '[['(2) %>% as.numeric()
+phclabel <- dat %>% group_by(PHC) %>% summarize(n=n()) %>% '[['(2) %>% as.numeric()
+
+ggplot(data=dat, aes(x=Y)) + 
+  geom_bar(fill = "gold") + 
+  geom_text(data = data.frame(), aes(x=sort(unique(dat$Y)), y=ylabel/2, label=ylabel)) 
+
+ggplot(data=dat, aes(x=AGE)) + 
+  geom_bar(fill = "red") + 
+  geom_text(data = data.frame(), aes(x=sort(unique(dat$AGE)), y=agelabel/2, label=agelabel))
+
+ggplot(data=dat, aes(x=BEDNET)) + 
+  geom_bar(fill = "blue") + 
+  geom_text(data = data.frame(), aes(x=sort(unique(dat$BEDNET), na.last=TRUE), y=bednetlabel/2, label=bednetlabel))
+
+ggplot(data=dat, aes(x=GREEN)) + 
+  geom_bar(fill = "green") + 
+  geom_text(data = data.frame(), aes(x=sort(unique(dat$GREEN)), y=greenlabel/2, label=greenlabel))
+
+ggplot(data=dat, aes(x=PHC)) + 
+  geom_bar(fill = "purple") + 
+  geom_text(data = data.frame(), aes(x=sort(unique(dat$PHC)), y=phclabel/2, label=phclabel))
+
+```
+
+
+Below, we investigate the proportions of missing bednet responses by each level of the predictors.
+
+```{r, fig.height=2, fig.width=3}
+dat <- read.csv("gambiaMissing.csv")
+
+bednet_group <- function(dat= NA, predictor = NA){
+  bednet_group <- dat %>% 
+                group_by_(predictor) %>% 
+                summarize(#BEDNET0 = mean(BEDNET==0 & !is.na(BEDNET)), 
+                          #BEDNET1 = mean(BEDNET==1 & !is.na(BEDNET)), 
+                          BEDNET01 = mean(!is.na(BEDNET)),
+                          BEDNETNA = mean(is.na(BEDNET))) %>%
+                melt(id=predictor)
+  colnames(bednet_group) <- c("x", "missing", "y")
+  return(bednet_group)
+}
+
+bednet_age <- bednet_group(dat, "AGE")
+bednet_green <- bednet_group(dat, "GREEN")
+bednet_phc <- bednet_group(dat, "PHC")
+bednet_y <- bednet_group(dat, "Y")
+
+ggplot(data=bednet_age, aes(x=as.factor(x), y=y, fill=missing)) + 
+  geom_col(position="stack") + 
+  labs(title="Age by Bednet",x="Age", y="Proportion", fill = "Missing") + 
+  scale_fill_discrete(labels = c("not missing", "missing")) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(data=bednet_green, aes(x=as.factor(x), y=y, fill=missing)) +
+  geom_col(position="stack") + 
+  labs(title="Greenery by Bednet",x="Green", y="Proportion", fill = "Missing") + 
+  scale_fill_discrete(labels = c("not missing", "missing")) +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x=element_text(size=5))
+
+ggplot(data=bednet_phc, aes(x=as.factor(x), y=y, fill=missing)) + 
+  geom_col(position="stack") +   
+  labs(title=" Health Clinic by Bednet",x="PHC", y="Proportion", fill = "Missing") + 
+  scale_fill_discrete(labels = c("not missing", "missing")) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(data=bednet_y, aes(x=as.factor(x), y=y, fill=missing)) + 
+  geom_col(position="stack") +   
+  labs(title="Parasites by Bednet",x="Malaria", y="Proportion", fill = "Missing") + 
+  scale_fill_discrete(labels = c("not missing", "missing")) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+# Multivariate Imputation by Chained Equations (MICE)
+
+```{r}
+m <- 10
+temp <- mice(dat, m = m, maxit = 35,method = c("", "", "logreg", "", ""), print = FALSE)
+#summary(temp)
+plot(temp)
+```
+
+```{r, fig.align = 'center', fig.height=3,fig.width=5}
+
+densityplot(temp)
+
+```
+
+The trace lines appear to be stationary and free of trends, indicating convergence. We can see that the density distribution of each of the imputed datasets (in red) is congruent with the original one (in blue). 
+
+# Predicting Malaria Parasites
+
+To predict whether someoneone will have malaria parasites, and to calculate the effect of each predictor (age, surrounding greenery, and accessible public health clinic), we build a logistic regression model on each generated dataset individually, and the pooled data. Below, we display the binned residual plots for each logistic regression model:
+
+```{r, fig.height=10, fig.width=10}
+model0 = with(temp, glm(Y ~ 1, family="binomial"))
+model1sub = with(temp, glm(Y ~ as.factor(AGE) + as.factor(GREEN) + as.factor(PHC), family="binomial"))
+model1 = with(temp, glm(Y ~ as.factor(AGE) + as.factor(GREEN) + as.factor(PHC) + as.factor(BEDNET), family="binomial"))
+
+resids <- sapply(model1[[4]], residuals)
+fitvals <- sapply(model1[[4]], fitted.values)
+
+
+par(mfrow = c(4,3))
+for(i in 1:m){
+  arm::binnedplot(fitvals[,i], resids[,i], main = paste0("Binned Residuals (m=",i,")"))
+}
+
+pool_coef <- as.matrix(summary(pool(model1))[,"est"])
+dat_complete <- dat[complete.cases(dat),]
+dat_complete_matrix <- (as.matrix(model.matrix(Y ~ as.factor(AGE) + as.factor(GREEN) + as.factor(PHC) + as.factor(BEDNET), data=dat_complete)))
+fitvals <- arm::invlogit(t(as.matrix(pool_coef)) %*% t(dat_complete_matrix))
+resids <- as.numeric(dat_complete[,1]) - fitvals #- 1
+
+  arm::binnedplot(as.numeric(fitvals), as.numeric(resids), main = paste0("Pooled Binned Residuals"))
+
+```
+
+Neither the pooled nor the individual residuals display any trends or changes in variance, which means this model is appropriate and meets the assumptions for constant variance of the logit probabilities.
+
+We can also check the accuracy of the model by looking at the confusion matrix and ROC curve for the pooled model.
+
+```{r, fig.height=4, fig.width=4, fig.align='center'}
+confusion <- confusionMatrix(round(fitvals),dat_complete$Y)
+confusion
+fourfoldplot(confusion$table)
+
+```
+
+The model accuracy is .63 which is somewhat better than a random predictor, and it has a lot of false negatives. We can see from the confusion matrix that the model predicted almost no 1's (malaria parasites in blood), even though the true proportion is much larger. This could be problematic for this dataset because it would be much more dangerous to predict false negatives than false positives. This indicates that the model is not appropriate for prediction, or that more imputed datasets were needed to achieve a better model.
+
+```{r,  fig.height=4, fig.width=4, fig.align='center'}
+rock <- pROC::roc(dat_complete$Y, as.numeric(fitvals))
+plot(rock,
+     main = "ROC Curve for Malaria Predictions")
+```
+
+The ROC curve shows us that the predictions are not accurate. We can see whenever we observe a high true positive rate (sensitivity), there must also be a low true negative rate (specificity), and vise versa.  for high sensitivity (true positive rate), we must have low specificity (true negative rate). The area under the curve is `r round(as.numeric(rock$auc),4)`, which is not much better than a random predictor at 0.5 (the gray line on the plot).
+
+
+# Inference on Coefficients
+
+```{r}
+sumtab <- summary(pool(model1))
+rownames(sumtab) <- c("Intercept", "AGE = 2", "AGE = 3", "AGE = 4", "GREEN = 33.65", "GREEN = 40.1", "GREEN = 40.85", "GREEN = 47.65", "PHC = 1", "BEDNET = 1")
+sumtab %>% '['(,-c(ncol(.), ncol(.)-1)) %>% kable()
+
+```
+
+After fitting a logistic regression to each of the 10 generated datasets, we can see that the bednet variable is actually not significant at the $\alpha$=0.05 confidence level.
+
+
+```{r}
+#pool.compare(model1, model1sub, data=temp, method="likelihood")$pvalue
+poool <- pool.compare(model1,model1sub, data=temp, method="likelihood")$pvalue
+
+```
+
+To further confirm that the bednet variable is not a significant predictor of malaria, we use a likelihood test comparing models with and without BEDNET. The p-value of this test is `r round(poool,4)`, which means that the larger model with bednet as a predictor does not explain deviance significantly better than the smaller one.
+
+
+
+# Contributions
+
+Nathaniel made the Exploratory Data Analysis plots on the missingness of the bednet variable, and completed the ROC analysis. Huijia worked on the Discussion of Approaches section. Angie worked on chained regression.
+
+# References
+
+Azur, M. J., Stuart, E. A., Frangakis, C., & Leaf, P. J. (2011). Multiple Imputation by Chained Equations: What is it and how does it work? International Journal of Methods in Psychiatric Research, 20(1), 40-49. http://doi.org/10.1002/mpr.329

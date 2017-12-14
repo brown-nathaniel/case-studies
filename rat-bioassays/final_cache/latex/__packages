@@ -1,0 +1,16 @@
+base
+ggplot2
+dplyr
+reshape2
+knitr
+StanHeaders
+rstan
+Matrix
+lme4
+mvtnorm
+gridExtra
+coda
+rjags
+R2jags
+nlme
+mgcv

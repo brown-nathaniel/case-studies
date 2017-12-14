@@ -1,0 +1,679 @@
+---
+title: "Case 2 Final Report"
+author: "Nathaniel Brown, In Hee Ho, Sarah Zimmermann"
+date: "October 19, 2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE}
+set.seed(440)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message=FALSE)
+library(knitr)
+library(ggplot2)
+library(survival)
+library(gridExtra)
+library(dplyr)
+library(survminer)
+library(reshape2)
+library(glmnet)
+library(arm)
+library(mice)
+library(plyr)
+```
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE}
+dat <- read.table("kellydat.txt", header=T)
+dat$race = "Other"
+dat$race[dat$black==1|dat$hisp==1 ]="Black or Hispanic"
+dat$gender = "Male"
+dat$gender[dat$male==0]="Female"
+dat$symptom = "0"
+dat$symptom[dat$sn1==1]="1"
+dat$symptom[dat$sn2==1]="2"
+dat$symptom[dat$sn3==1|dat$all4==1]="3+"
+dat$scan="not scanned"
+dat$scan[dat$fail==1]="scanned"
+dat = dat %>% group_by(race) %>% mutate(racescan = ifelse(fail == 1, mean(fail), 1-mean(fail)))
+dat = dat %>% group_by(symptom) %>% mutate(symptomscan = ifelse(fail == 1, mean(fail), 1-mean(fail)))
+dat = dat %>% group_by(gender) %>% mutate(genderscan = ifelse(fail == 1, mean(fail), 1-mean(fail))) %>% as.data.frame()
+```
+
+# Introduction
+
+The data are from a study of time to critical neurological assessment for patients with stroke-like symptoms who are admitted to the emergency room. We are interested in the factors predictive of the time to assessment following admission to the ED for n=335 patients with mild to moderate motor impairment. The goal of the analysis is to perform inferences on the impact of clinical presentation, gender, and race (Black, Hispanic, and others) on time to neurological assessment, where clinical presentation is measured as the number of the four major stroke symptoms: headache, loss of motor skills or weakness, trouble talking or understanding, and vision problems. However, as discussed in our previous report, we group Blacks and Hispanics together, and number of symptoms of 3 and 4 together, due to their small sample size.
+
+#Methods
+
+The team has cleaned, understood, and modeled these time to critical neurological assessment for patients with stroke-like symptoms data in order to solve the scientific problem of exploring if gender, race/ethnicity, and clinical presentation have an affect on wait list to assessment. To do so the team has approached the problem as such:
+
+1. Data Exploration 
+  + Read in the data 
+  + Explore summary statistics of data 
+  + Visualize the data 
+2. Create inital models including OLS, Ridge, and LASSO
+  + Diagnostics
+  + Results
+  + Survival Curves 
+  + Interpretation 
+  + Assess sucess
+3. Create final models with kernel regression
+  + Diagnostics
+  + Results
+  + Survival Curves 
+  + Interpretation
+4. Final recommendations and insight 
+
+#Data Exploration
+
+###Variables 
+
+The original data set contains 335 observations across 9 variables. They are defined as: 
+
+
+Variable Name | Short Description | Type  
+------------- | ------------- | --------------
+nctdel|min of neurologist time to assessment & CT scan from arrival at ER| continous
+fail|1 if got neurologist/CT scan & 0 otherwise|categorical
+male| 1 if male, 0 if female| categorical
+black|1 if black, 0 if not black|categorical
+hisp|1 if hispanic, 0 if not hispanic|categorical
+sn1|0/1 indicator 1 main symptom| categorical
+sn2|0/1 indicator 2 main symptoms| categorical
+sn3|0/1 indicator 3 main symptoms| categorical
+all4|0/1 indicator all main sumptoms|categorical
+
+
+```{r}
+pdat = dat[,1:2]
+pdat$race = "Others"
+pdat$race[dat$black==1]="Black"
+pdat$race[dat$hisp==1]="Hispanic"
+pdat$gender = "male"
+pdat$gender[dat$male==0]="female"
+pdat$symptom = "0"
+pdat$symptom[dat$sn1==1]="1"
+pdat$symptom[dat$sn2==1]="2"
+pdat$symptom[dat$sn3==1]="3"
+pdat$symptom[dat$all4==1]="4"
+
+p1<- ggplot(data = pdat, aes(x=race, fill=race)) + geom_bar() + theme_bw()+labs(x="Race", y="Frequency",fill="") + theme(axis.text = element_text(angle = 45, hjust = 1)) + ggtitle("Race")
+p2<- ggplot(data = pdat, aes(x=symptom, fill=symptom)) + geom_bar() + theme_bw()+labs(x="Number of Symptoms", y="Frequency", fill="")+ ggtitle("Clinical Pres")
+p3<- ggplot(data= pdat, aes(x=gender, fill= gender)) + geom_bar() + theme_bw()+labs(x="Gender", y="Frequency", fill="") + ggtitle("Gender")
+
+grid.arrange(p1, p2, p3 , ncol=3)
+
+```
+
+To visualize the data we have provided the above graphs which show the frequency of the characteristics patients can have. We see most (above 250) of the patients are non-black and non hispanic  and less than 100 are either black or hispanic. The most common number of symptoms is 1 then 0, 2, 3, and 4. Finally the gender split between male and females is generally even; however, there are more females in the data then male. 
+
+Before moving on it should be noted there are no missing values or apparently out of range values in our data, and therefore we did not clean the data in any way. We did group some of the characteristics of patients because of sample size, however. In the following analysis we grouped black and hispanics in one category for race/ethnicity and non black and non hispanics in the other. This decision was based on the fact there are only 9 hispanics in the data set which is too small of a population to make meaningful conclusions.  Next, symptom is a 4 level variable: "0" for those who had no symptoms, "1" for those who had 1 symptom, "2" for those who had 2 symptoms, and "3+" for those who had 3 or more symptoms. We grouped those patients which 3 or 4 symptoms together because there were only 6 individuals out of 335 observations in the dataset who had 4 symptoms, which is very small a population size to draw any conclusions on.  
+
+We now continue on in our report to further understand the data specifically the exploratory data analysis we found useful when later we created data models. 
+
+
+###Exploratory Data Analysis
+
+
+```{r}
+data.race = dat[,colnames(dat)=="race" | colnames(dat)=="scan"]
+data.m = melt(table(data.race))
+m1 = ddply(melt(table(data.race)), .(race), summarize, ratio=value/sum(value)) 
+m2 = data.m[order(data.m$race),]
+data.race = data.frame(m2,ratio=m1$ratio)
+data.race = ddply(data.race, .(race), transform, position1 = cumsum(value) - 0.5*value)
+data.race = ddply(data.race, .(race), transform, position = sum(value) - position1)
+data.gender = dat[,colnames(dat)=="gender" | colnames(dat)=="scan"]
+data.m = melt(table(data.gender))
+m1 = ddply(melt(table(data.gender)), .(gender), summarize, ratio=value/sum(value)) 
+m2 = data.m[order(data.m$gender),]
+data.gender = data.frame(m2,ratio=m1$ratio)
+data.gender = ddply(data.gender, .(gender), transform, position1 = cumsum(value) - 0.5*value)
+data.gender = ddply(data.gender, .(gender), transform, position = sum(value) - position1)
+data.sym = dat[,colnames(dat)=="symptom" | colnames(dat)=="scan"]
+data.m = melt(table(data.sym))
+m1 = ddply(melt(table(data.sym)), .(symptom), summarize, ratio=value/sum(value)) 
+m2 = data.m[order(data.m$symptom),]
+data.sym = data.frame(m2,ratio=m1$ratio)
+data.sym = ddply(data.sym, .(symptom), transform, position1 = cumsum(value) - 0.5*value)
+data.sym = ddply(data.sym, .(symptom), transform, position = sum(value) - position1)
+
+p1 <-ggplot(data.race,aes(x = race, y = value, fill = scan)) + theme_bw() +
+  geom_bar(stat = "identity")+ geom_text(aes(label = sprintf("%1.2f%%", 100*ratio), y = position)) + labs(x = "Race", y = "Frequency", fill = "Scanned or Not", title="Percentage of Patients Who Saw Neurologist by Race")
+p2<-ggplot(data.gender,aes(x = gender, y = value, fill = scan)) + theme_bw() +
+  geom_bar(stat = "identity")+ geom_text(aes(label = sprintf("%1.2f%%", 100*ratio), y = position)) + labs(x = "Gender", y = "Frequency", fill = "Scanned or Not", title="Percentage of Patients Who Saw Neurologist by Gender")
+p3<-ggplot(data.sym,aes(x = symptom, y = value, fill = scan)) + theme_bw() +
+  geom_bar(stat = "identity")+ geom_text(aes(label = sprintf("%1.2f%%", 100*ratio), y = position)) + labs(x = "Number of Symptoms", y = "Frequency", fill = "Scanned or Not", title="Percentage of Patients Who Saw Neurologist by Symptoms")
+grid.arrange(p1, p2,p3, nrow=3)
+```
+There do not appear to be differences in whether or not patient receives a scan between different race or gender. However, the ratio of patients receiving neurological scan is higher for patients who have no syptom and for patients who have 2 symptoms. The ratio drops much when patients show 3 or more symptoms. This insight can be useful in the model later.
+
+
+```{r}
+ggplot(data = dat, aes(x=nctdel, fill=scan)) + geom_histogram(binwidth = 1, col="white") + theme_bw() + labs(x="Time to Assessment", y="Frequency", fill="Scanned or Not")
+```
+
+We observe some non-linearity of the distribution of the time-to-event variable. Hence, we use kernel regression to capture such non-linearity. We categorize variable nctdel each for every 1 minute. However, the sample size gets very small after 5 minutes, as can be observed from the above plot. Hence, we group all events occuring after 5 minutes grouped together.
+
+
+```{r logitfunctions}
+#all the functions
+
+lower_bound <- function(x, bounds){
+  ret <- rep(NA, length(x))
+  for(i in 1:length(x)){
+    xi <- x[i]
+    found <- (which(xi >= c(-Inf, bounds) & (xi <= c(bounds, Inf))))[1] - 1
+    if(found==0){found<-1}
+    ret[i] <- bounds[found]
+  }
+  return(ret)
+}
+
+
+#transform continuous time (nctdel) into categries based on lower bounds of "bounds" variable
+categorize_dat <- function(dat=NA, bounds=NA){
+
+  dat$timecat <- as.integer(as.factor(lower_bound(dat$nctdel, bounds)))
+  dat$personid <- 1:nrow(dat)
+  datcat <- merge(dat$personid, bounds) %>% 
+          mutate(personid=x, timecat=as.integer(as.factor(y))) %>%
+            #take all unique combinations of people and time categories
+          merge(dat, by=c("personid", "timecat"), all=TRUE) %>%
+          mutate(fail = ifelse(is.na(fail), 0, fail)) %>%
+            #add fail column
+          group_by(personid) %>%
+          mutate(maxtimecat = (timecat)[!is.na(nctdel)],
+                 atrisk = (timecat <= maxtimecat)) %>%
+          filter(atrisk) %>%
+            #for each person, identify rows where persons are not at risk (after they fail/drop out), and remove those rows
+          dplyr::select(personid, timecat, fail) %>%
+          as.data.frame()
+
+#code to add predictors of race, gender, and number of symptoms
+  datcat <- merge(datcat, dat, by="personid", all=T) %>% 
+          mutate(symptom0 = ifelse(symptom == 0, 1, 0),
+                 symptom1 = ifelse(symptom == 1, 1, 0),
+                 symptom2 = ifelse(symptom == 2, 1, 0),
+                 raceother = ifelse(race == "Other", 1, 0), 
+                 male = ifelse(gender == "Male", 1, 0), 
+                 personid = as.integer(personid), 
+                 timecat = as.integer(timecat.x), 
+                 fail = as.integer(fail.x)) %>% 
+          dplyr::select(personid, timecat = timecat, fail = fail, symptom0, symptom1, symptom2, raceother, male)
+
+#code to add indicator effects of every timeunit
+  Xmat <- array(0, c(nrow(datcat), length(bounds)))
+
+  for(r in 1:nrow(datcat)){
+    Xmat[r,datcat$timecat[r]] <- 1
+  }
+
+  colnames(Xmat) <- paste0("X",1:ncol(Xmat))
+
+
+  datcat_X <- (cbind((datcat), Xmat))
+
+  datcat_X$nctdel <- merge(datcat_X, dat, by="personid", all=TRUE)$nctdel
+  
+  return(datcat_X)
+}
+
+#obtain fitted values, pearson residuals, deviance residuals, and other diagnostic tools
+logistic_diagnostics <- function(mod=NA, ydat=y, Xdat=X){
+  
+  if(class(mod)[1] == "cv.glmnet"){
+    fitvals <- predict.cv.glmnet(mod, newx = Xdat, s="lambda.min")
+  }else{
+    fitvals <- predict.glm(mod, newdata=data.frame(Xdat))
+  }
+  p_hat <- invlogit(fitvals)
+  resids_p <- (ydat-p_hat)/(sqrt(p_hat*(1-p_hat)))
+  s <- ydat; s[ydat==0] <- -1
+  resids_d <- s*sqrt(-2*(ydat*log(p_hat) + (1-ydat)*log(1-p_hat)))
+  resids_p_stat <- sum(resids_p^2)
+  resids_d_stat <- -2*sum(ydat*log(p_hat) + (1-ydat)*log(1-p_hat))
+  p <- sum(as.matrix(coef(mod)) != 0 | is.na(as.matrix(coef(mod))))
+  dof <- nrow(Xdat)-p
+  return(list(p_hat = p_hat, resids_p=resids_p, resids_p_stat=resids_p_stat, resids_d=resids_d, resids_d_stat=resids_d_stat, dof=dof))
+}
+
+#obtain confidence intervals for coefficients (for glm object)
+logistic_conf <- function(mod){
+  stats <- summary(mod)$coefficients
+  xbar <- stats[,1]
+  sigma <- stats[,2]
+  logmodcoef <- xbar + 1.96*cbind(-sigma, sigma)
+  logmodcoef <- round(logmodcoef,4)
+  colnames(logmodcoef) <- c("Lower", "Upper")
+  return(logmodcoef)
+}
+
+#reshape categorized timebins into a specified number of kernels
+kernel_transformation <- function(datcat, bounds, kernels, s=NA) {
+
+  Ks <- array(NA, c(nrow(datcat), kernels))
+  colnames(Ks) <- paste0("k", 1:kernels)
+  datcat <- datcat[,!startsWith(colnames(datcat), "X")]
+  datcat_k <- cbind(datcat, Ks)
+  kcols <- (ncol(datcat_k) - kernels + 1):ncol(datcat_k)
+  
+  tau <- seq(from=1, to=max(bounds), length.out = kernels)
+  if(is.na(s)){
+    s <- (tau[2]-tau[1])/2
+  }
+  # each row is one bin, the columns are the kernel weights for that bin
+  kernel.weights <- matrix(dnorm(x=rep(1:length(bounds),kernels),mean=rep(tau,each=length(bounds)),s), ncol=kernels)
+
+  for(p in unique(datcat$personid)){
+    subrows <- which(datcat$personid == p)
+    time <- max(datcat$timecat[subrows])
+
+    K <- array(kernel.weights[1:time,],dim=c(time,kernels))
+    datcat_k[subrows,kcols] <- K
+  }
+  #datcat_k <- cbind(datcat, K)
+  # X has kernel weights instead of the bin indicators that it had before
+   return(as.data.frame(datcat_k))
+}
+
+
+```
+
+```{r logitanalysis}
+#all the analysis
+
+bounds <- 0:5
+datcat_X <- categorize_dat(dat, bounds)
+indepcols <- which(!colnames(datcat_X) %in% c("fail", "personid", "timecat", "nctdel"))
+X <- as.matrix(datcat_X[,indepcols])
+y <- datcat_X$fail
+
+kernels <- 2
+datcat_Xk <- kernel_transformation(datcat_X, bounds, kernels, s=NA)
+indepcolsk <- which(!colnames(datcat_Xk) %in% c("fail", "personid", "timecat", "nctdel"))
+Xk <- as.matrix(datcat_Xk[,indepcolsk])
+yk <- datcat_Xk$fail
+
+nullmod <- glm(fail ~ 1, data=datcat_X, family="binomial")
+nullmod_stats <- logistic_diagnostics(nullmod)
+nullmod_test <- pchisq(nullmod$deviance, nullmod$df.residual, lower=FALSE)
+
+logmod <- glm(y ~ 0 + ., family="binomial", data = as.data.frame(cbind(y,X))) #0 means no incercept
+logmod_stats <- logistic_diagnostics(logmod)
+logmod_test <- pchisq(logmod$deviance, logmod$df.residual, lower=FALSE)
+logmod_coef <- logistic_conf(logmod)
+
+lassomod <- cv.glmnet(y=y, x = X, family="binomial", type.measure="class", alpha = 1, intercept=FALSE)
+lassomod_stats <- logistic_diagnostics(lassomod)
+lassomod_test <- pchisq(lassomod_stats$resids_d_stat, lassomod_stats$dof, lower=FALSE)
+lassomod_coef <- round(as.matrix(coef(lassomod)),4)
+colnames(lassomod_coef) <- "LASSO Estimate"
+
+ridgemod <- cv.glmnet(y=y, x = X, family="binomial", type.measure="class", alpha = 0,intercept=FALSE)
+ridgemod_stats <- logistic_diagnostics(ridgemod)
+ridgemod_test <- pchisq(ridgemod_stats$resids_d_stat, ridgemod_stats$dof, lower=FALSE)
+ridgemod_coef <- round(as.matrix(coef(ridgemod)),4)
+colnames(ridgemod_coef) <- "Ridge Estimate"
+
+kernelmod <- glm(yk ~ 0 + .,  data = as.data.frame(cbind(yk,Xk)), family="binomial")
+kernelmod_stats <- logistic_diagnostics(kernelmod, yk, Xk)
+kernelmod_test <- pchisq(kernelmod_stats$resids_d_stat, kernelmod_stats$dof, lower=FALSE)
+kernelmod_coef <- logistic_conf(kernelmod)
+
+```
+
+
+
+#Initial Model Exploration
+
+
+Our predictors consist of the aforementioned categories of assessment time, race, gender, and clinical presentation. The binned residual plots, deviance test results, and coefficients are reported below. We attempted three approaches to logistic regresion -- Ordinary Least Squares (OLS), LASSO, and Ridge -- but will focus on the OLS model as it best fits the data. The glmnet package does not provide standard errors for its coefficients, so we cannot report confidence intervals for the estimates. See exploration below. 
+
+###Diagnostics
+
+We check the diagnostics to see if the model properly fits the data. We see the residuals are spread evenly above and below 0 and have no apparent pattern. Overall, the logistic models require normality and independence and from the residuals we can generally say the model meets these assumptions. 
+
+```{r}
+
+binnedplot(x=logmod$fitted.values, y=logmod_stats$resids_d, main = "OLS Log Regression Binned Resid", ylab = "Deviance Residuals", xlab = "Fitted Values", nclass = 50)
+
+```
+
+###Results 
+
+
+```{r}
+d <- round(matrix(c(logmod_test)),1)
+colnames(d) <- "Deviance p-value"
+rownames(d) <- c("OLS")
+
+#kable(d)
+
+kable(logmod_coef)
+```
+
+We see that none of the variables, except for X1 and X3, contains zero in their 95% confidence interval. But overall, the OLS does not find much difference between different groups. Hence, we cannot confidently claim that any of these factors (gender, race, clinical presentation) are predictive of the time to assessment.
+
+###Survival Curves 
+```{r}
+#survival to time t = p(x>t);
+get_timecat_hazards <- function(mod){
+  coefs <- as.matrix(coef(mod))
+  invlogit(coefs[which(startsWith(rownames(coefs),"X")),])
+}
+
+get_timecat_survival <- function(mod_hazards){
+  p <- s <- NULL
+  for(t in 1:length(mod_hazards)){
+
+    #h_1 <- p(x=1)/p(x>=1) = p(x=1)
+    #h_2 <- p(x=2)/p(x>=2) = p(x=2)/(1-h_1)
+    #h_3 <- p(x=3)/p(x>=3) = p(x=3)/[(1-h_1)(1-h_2)]
+  
+    #h_t <- p(x=t)/[(1-h_1)(1-h_2)...(1-h_(t-1))] ==> p(x=t) = h_t(1-h_1)(1-h_2)...(1-h_(t-1))
+      p[t] <- prod(1-mod_hazards[0:(t-1)])*mod_hazards[t]
+  #calculate discrete pdf
+  
+    #put the p(x=1), p(x=2)...all together
+
+  #calculate survival by summing pdf bins
+  
+    #s(t) = sum(pdf) from 0 to t
+  }
+  s <- 1-cumsum(p)
+  return(list(pmf=p, surv=s))
+}
+
+
+#calculate the hazards of each time category (kernels are a little more complicated)
+logmod_hazards <- get_timecat_hazards(logmod)
+lassomod_hazards <- get_timecat_hazards(lassomod)
+ridgemod_hazards <- get_timecat_hazards(ridgemod)
+
+
+
+logmod_surv <- get_timecat_survival(logmod_hazards)
+lassomod_surv <- get_timecat_survival(lassomod_hazards)
+ridgemod_surv <- get_timecat_survival(ridgemod_hazards)
+
+
+
+plot(x=1:length(logmod_surv[[2]]), y=logmod_surv[[2]], type="s", main= "OLS Cumulative Survival", ylab="Survival", xlab="t")
+# plot(x=1:length(lassomod_surv[[2]]), y=lassomod_surv[[2]], type="s")
+# plot(x=1:length(ridgemod_surv[[2]]), y=ridgemod_surv[[2]], type="s")
+
+
+
+```
+
+
+###Interpretation 
+
+The models we build for this analysis do not fit the data well. This can be due to a relatively small sample
+size of 335 patients, or the possibility that there is no measurable difference between races, genders, and
+clinical presentation in time to treatment. Hence, we attempt to fit more flexible models, such as generalized additive models with kernel smoothing, which is presented below.
+
+
+
+#Final Model Exploration 
+
+In order to better model the data, the group move forward with a more flexible model: kernel logistic regression. A kernel model can possibly better fit the data because kernel regression create smaller divisions or bins of the data and then fit the data within each bin. This approach might better model the data as we hope to see some of the coefficients not close to 0 therefore suggesting that clinical presentation, gender and race have an influence on wait time. 
+
+###Diagnostics 
+
+We first check the diagnostics of the model to see if it properly fits the data. In kernel logistic regression we check if the linearity and normality assumptions are met. Since we see no general pattern in the residuals and an even spread above and below 0 we believe we can move forward with the model. 
+
+```{r}
+binnedplot(x=kernelmod_stats$p_hat, y=kernelmod_stats$resids_d, main = "Kernel Logistic Regression Binned Residuals", ylab = "Deviance Residuals", xlab = "Fitted Values", nclass = 50)
+```
+
+
+
+##Results  
+
+The coefficients of this model suggest wait time does not change much with differeing number of symptoms, race, and gender. Except for symptom 0 and symptom 2, the 95% confidence intervals (presented below) of the variables include 0. Compared to the base case with 3 or more symptoms, patients with 0 symptom or 2 symptoms will wait for shorter time. If the patient is non black and non hispanic, the wait time will be shorter, and finally if the patient is male the wait time is expected to be shorter as well. In terms of significance the other predictor that came back with a p value of <.05 (0.0224) was a patient with 0 symptoms; therefore, we can say those with the least symptoms will wait the least time. 
+
+
+```{r}
+kable(kernelmod_coef)
+```
+
+
+
+We will now visualize these results by creating a survival curves for the total population and survival curves for patients with 0/1/2/3+ symptoms, male/female, and black+hispanic/non-black+ non-hispanic.  
+
+
+###Survival Curves 
+
+Below is the survival curve for the entire population despite race, gender, and clinical presentation. We will compare the population survival curve to the survival curves based on gender, race, and clinical presentation. If there is a difference between the total population survival curve and the other survival curves this is a way to tell if gender, race, or clinical presentation have an influence on wait time. 
+
+```{r}
+
+#kernel survival curve 
+bounds=c(0,1,2,3,4,5)
+kernels=2
+tau <- seq(from=1, to=max(bounds), length.out = kernels)
+s <- (tau[2]-tau[1])/2
+kernel.weights <- matrix(dnorm(x=rep(1:length(bounds),kernels),mean=rep(tau,each=length(bounds)),s), ncol=kernels)
+
+kernel.weights_1= data.frame(kernel.weights, rep(coef(kernelmod)["symptom0"], 6), rep(coef(kernelmod)["symptom1"], 6), rep(coef(kernelmod)["symptom2"]), rep(coef(kernelmod)["raceother"] ,6), rep(coef(kernelmod)["male"], 6) )
+
+colnames(kernel.weights_1)= c("k1", "k2", "symptom0", "symptom1", "symptom2", "raceother", "male")
+
+
+x= predict(kernelmod, kernel.weights_1)
+
+kernel_surv= get_timecat_survival(invlogit(x))
+
+plot(x=1:length(kernel_surv[[2]]), y=kernel_surv[[2]], type="s", main= "Cumulative Kernel Survival", xlab="t", ylab="Survival")
+
+
+```
+
+Here we see the survival curves based on clinical presentation, gender, and race. Although there are some differences in survival rate for symptom 0 and symptom 2, survival rate do not appear to differ significantly by different groups of gender and race. 
+
+```{r}
+kernel.weights_2= kernel.weights_1
+kernel.weights_2$symptom0=1
+kernel.weights_2$symptom1=0
+kernel.weights_2$symptom2=0
+y=predict(kernelmod, kernel.weights_2)
+kernel_surv_symp0= get_timecat_survival(invlogit(y))
+
+kernel.weights_3 = kernel.weights_2
+kernel.weights_3$symptom0=0
+kernel.weights_3$symptom1=1
+y1=predict(kernelmod, kernel.weights_3)
+kernel_surv_symp1= get_timecat_survival(invlogit(y1))
+
+kernel.weights_4 = kernel.weights_3
+kernel.weights_4$symptom1=0
+kernel.weights_4$symptom2=1
+y2=predict(kernelmod, kernel.weights_4)
+kernel_surv_symp2= get_timecat_survival(invlogit(y2))
+
+kernel.weights_45 = kernel.weights_4
+kernel.weights_45$symptom2=0
+y25 = predict(kernelmod, kernel.weights_45)
+kernel_surv_symp3 = get_timecat_survival(invlogit(y25))
+
+
+
+kernel.weights_5= kernel.weights_1
+kernel.weights_5$raceother=1
+y3=predict(kernelmod, kernel.weights_5)
+kernel_surv_raceother= get_timecat_survival(invlogit(y3))
+
+kernel.weights_55 = kernel.weights_5
+kernel.weights_55$raceother=0
+y35 = predict(kernelmod, kernel.weights_55)
+kernel_surv_race = get_timecat_survival(invlogit(y35))
+
+kernel.weights_6 = kernel.weights_1
+kernel.weights_6$male=1
+y4=predict(kernelmod, kernel.weights_6)
+kernel_surv_male= get_timecat_survival(invlogit(y4))
+
+kernel.weights_65 = kernel.weights_6
+kernel.weights_65$male=0
+y45=predict(kernelmod, kernel.weights_65)
+kernel_surv_female= get_timecat_survival(invlogit(y45))
+
+plot(x=1:length(kernel_surv_symp0[[2]]), y=kernel_surv_symp0[[2]], type="s", col="red", plot="Survival Curves", ylab="Survival", xlab="t", main="Symptoms Survival Curve")
+lines(x=1:length(kernel_surv_symp1[[2]]), y=kernel_surv_symp1[[2]], type="s", col="blue")
+lines(x=1:length(kernel_surv_symp2[[2]]), y=kernel_surv_symp2[[2]], type="s", col="black")
+lines(x=1:length(kernel_surv_symp3[[2]]), y=kernel_surv_symp3[[2]], type="s", col="green")
+legend("topright", legend=c("0 symp", "1 Symp", "2 Symp", "3+Symp"), col=c("red", "blue", "black","green"),lty=1, cex=0.8)
+
+
+plot(x=1:length(kernel_surv_race[[2]]), y=kernel_surv_race[[2]],type="s", col="black", main="Race Survival Curve", ylab="Survival", xlab="t")
+lines(x=1:length(kernel_surv_raceother[[2]]), y=kernel_surv_raceother[[2]],type="s", col="blue")
+legend("topright", legend=c("Black/Hisp", "Non-Black/Hisp"), col=c("black", "blue"), cex=0.8,lty=1)
+
+plot(x=1:length(kernel_surv_male[[2]]), y=kernel_surv_male[[2]], type="s", col="magenta", main= "Gender Survival Curve", ylab="Survival", xlab="t")
+lines(x=1:length(kernel_surv_female[[2]]), y=kernel_surv_female[[2]], type="s", col="black")
+legend("topright", legend=c("Male", "Female"), col=c("magenta", "black"), cex=0.8,lty=1)
+```
+
+
+
+
+# Discussion
+
+In the end our models did not come back with much insight on the impact of clinical presentation, gender, and race on wait time. To discuss we believe this could be due to the weakness of the sample size. Specifically with the way we made our kernels (which splits up time into binds and focus on fitting the data within each bin) we noticed there was very little data in the group we made that have longer than a 5 time unit wait. Because there was not enough data on the people who had to wait the longest our analysis could not draw any conclusion on what was influencing those people to wait the longest. Perhaps with more data we could use the same flexible model strategy through kernel logistic regression and draw better conclusions about the impact of race, gender, and clinical presentation on wait time. 
+
+
+
+##References 
+
+https://www.r-bloggers.com/imputing-missing-data-with-r-mice-package/
+
+http://influentialpoints.com/Training/coxs_proportional_hazards_regression_model-principles-properties-assumptions.htm#modmch
+
+
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3059453/
+
+
+http://dwoll.de/rexrepos/posts/survivalKM.html
+
+##Credits 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- why nothing is significant: 
+
+ #this is not actually part of the report as of right now
+dat$lnctdel <- log(dat$nctdel+0.01)
+dat %>% filter(nctdel < quantile(nctdel,0.95) & fail == 1) %>% group_by(symptom) %>% summarize(mean = mean(nctdel), n = n(), sd = sd(nctdel)) %>% mutate(lower = (mean - 1.96*sd/sqrt(n)), upper = (mean + 1.96*sd/sqrt(n)))
+
+dat %>% filter(nctdel < quantile(nctdel,0.95) & fail == 1) %>% group_by(gender) %>% summarize(mean = mean(nctdel), median = median(nctdel)) 
+
+ dat %>% filter(nctdel < quantile(nctdel,0.95) & fail == 1) %>% group_by(race) %>% summarize(mean = mean(nctdel), median = median(nctdel)) 
+
+
+
+
+Old survival curves.. not sure if we need these 
+# ```{r}
+# plot(survfit(Surv(timecat, fail) ~ raceother + male, data = datcat_X), 
+#      main=expression(paste("Kaplan-Meier Estimate ", hat(S)(t), " with CI")),xlab="t", ylab="Survival", lwd=2)
+# ```
+# 
+# ```{r}
+# plot(survfit(Surv(timecat, fail) ~ raceother + male, data=datcat_X) , xlab="Survival Time", 
+#   ylab="% Surviving", yscale=100, col=c("red","blue", "black", "green"),
+#   main="Survival Distributions") 
+#   legend("topright", title="Legend", c("Black/Hisp", "Non Black/Hisp" ,"Male", "Female"),
+#   fill=c("red", "blue", "black", "green"))
+#   
+#   survdiff(Surv(timecat, fail) ~ raceother + male, data=datcat_X)
+# ```
+
+
+
+Mice stuff 
+
+# ```{r}
+# data <- read.table("kellydat.txt", header=T)
+# data$race = 0
+# data$race[data$black==1|data$hisp==1] = 1
+# data$sn0 = 0
+# data$sn0[data$sn1==0 & data$sn2==0 & data$sn3==0 & data$all4==0] = 1
+# 
+# data.imp = data
+# data.imp$nctdel[data.imp$fail == 0] = NA
+# 
+# #md.pattern(data.imp[!is.na(data.imp$nctdel),])
+# 
+# tempData <- mice(data.imp,m=5,maxit=50,meth='pmm',seed=500, print=FALSE)
+# # methods: 
+# # 2l.norm / 2l.pan / 2lonly.mean / 2lonly.norm / 2lonly.pmm / 
+# # cart / fastpmm / lda / logreg / logreg.boot / mean / midastouch / norm / norm.boot / norm.nob / 
+# # norm.predict / passive / pmm / polr / polyreg / quadratic / rf / ri / sample
+# 
+# #tempData$imp$nctdel
+# 
+# data.imp <- complete(tempData)
+# 
+# hist(log(data.imp$nctdel + 0.1))
+# 
+# fit <-lm(log(nctdel+0.1) ~ sn0 + sn1 + sn2 + race + male, data = data)
+# ```
+# 
+# ##Diagnostic 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# ```{r}
+# library(VIM)
+# library(mice)
+# 
+# 
+# ##looking for pattern of missing data
+# md.pattern(data.imp)
+# 
+# #visualizations: 
+# aggr_plot <- aggr(data, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(data), cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+# 
+# marginplot(data.imp[c(1,2)])
+# marginplot(data[c(1,3)])
+# marginplot(data[c(1,4)])
+# marginplot(data[c(1,5)])
+# marginplot(data[c(1,6)])
+# marginplot(data[c(1,7)])
+# marginplot(data[c(1,8)])
+# marginplot(data[c(1,9)])
+# marginplot(data[c(1,10)])
+# 
+# 
+# 
+# #visualize distribution of original and imputed data- check if imputed data is plausible
+# 
+# #xyplot(tempData,nctdel ~ fail+male+black,pch=18,cex=1)  
+# 
+# #densityplot(tempData)
+# 
+# #stripplot(data, pch = 20, cex = 1.2)
+# ```
+-->
